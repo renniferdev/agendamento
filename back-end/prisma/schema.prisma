@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenant (estabelecimento)
+// ---------------------------------------------------------------------------
+
+model Establishment {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  primaryColor   String   @default("#4F46E5") @map("primary_color")
+  logoUrl        String?  @map("logo_url")
+  phone          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  businessHours  BusinessHour[]
+  users          User[]
+  services       Service[]
+  customers      Customer[]
+  appointments   Appointment[]
+  blockedSlots   BlockedSlot[]
+
+  @@map("establishments")
+}
+
+// Horário de funcionamento por dia da semana (0 = domingo ... 6 = sábado).
+// Um estabelecimento pode ter múltiplas janelas no mesmo dia (ex: manhã e tarde).
+model BusinessHour {
+  id              String   @id @default(cuid())
+  establishmentId String   @map("establishment_id")
+  dayOfWeek       Int      @map("day_of_week") // 0-6
+  startTime       String   @map("start_time")  // "09:00"
+  endTime         String   @map("end_time")    // "18:00"
+
+  establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  @@index([establishmentId, dayOfWeek])
+  @@map("business_hours")
+}
+
+// ---------------------------------------------------------------------------
+// Auth (Auth.js schema padrão + campos próprios)
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+model User {
+  id              String    @id @default(cuid())
+  establishmentId String?   @map("establishment_id")
+  name            String?
+  email           String    @unique
+  emailVerified   DateTime? @map("email_verified")
+  image           String?
+  passwordHash    String?   @map("password_hash") // null para quem só usa login Google
+  role            Role      @default(ADMIN)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
+  accounts        Account[]
+  sessions        Session[]
+
+  @@index([establishmentId])
+  @@map("users")
+}
+
+// Modelos abaixo seguem o formato exigido pelo @auth/prisma-adapter
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Domínio de agendamento (genérico para qualquer tipo de estabelecimento)
+// ---------------------------------------------------------------------------
+
+model Service {
+  id              String   @id @default(cuid())
+  establishmentId String   @map("establishment_id")
+  name            String
+  durationMinutes Int      @map("duration_minutes")
+  priceCents      Int      @map("price_cents")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+
+  @@index([establishmentId])
+  @@map("services")
+}
+
+model Customer {
+  id              String   @id @default(cuid())
+  establishmentId String   @map("establishment_id")
+  name            String
+  phone           String
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+
+  @@index([establishmentId, phone])
+  @@map("customers")
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  establishmentId String            @map("establishment_id")
+  customerId      String            @map("customer_id")
+  serviceId       String            @map("service_id")
+  startsAt        DateTime          @map("starts_at")
+  endsAt          DateTime          @map("ends_at")
+  status          AppointmentStatus @default(PENDING)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  customer        Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service         Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([establishmentId, startsAt])
+  @@map("appointments")
+}
+
+// Bloqueios administrativos (folga, feriado, manutenção) — não são agendamentos de clientes.
+model BlockedSlot {
+  id              String   @id @default(cuid())
+  establishmentId String   @map("establishment_id")
+  startsAt        DateTime @map("starts_at")
+  endsAt          DateTime @map("ends_at")
+  reason          String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  @@index([establishmentId, startsAt])
+  @@map("blocked_slots")
+}
