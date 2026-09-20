@@ -1,8 +1,18 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 export interface TimeSlot {
   start: Date;
   end: Date;
+}
+
+/** PrismaClient ou o client de uma transação interativa (`tx`). */
+export type DbClient = Prisma.TransactionClient;
+
+export class ServiceNotFoundError extends Error {
+  constructor() {
+    super("Serviço não encontrado ou inativo para este estabelecimento.");
+  }
 }
 
 interface GetAvailableSlotsParams {
@@ -15,6 +25,11 @@ interface GetAvailableSlotsParams {
    * Por padrão, usa a própria duração do serviço (slots "colados").
    */
   slotIntervalMinutes?: number;
+  /**
+   * Client a usar nas queries. A criação de agendamento passa o `tx` da
+   * transação para que a revalidação enxergue o mesmo estado que o insert.
+   */
+  db?: DbClient;
 }
 
 const ACTIVE_APPOINTMENT_STATUSES = ["PENDING", "CONFIRMED"] as const;
@@ -70,13 +85,14 @@ export async function getAvailableSlots({
   serviceId,
   date,
   slotIntervalMinutes,
+  db = prisma,
 }: GetAvailableSlotsParams): Promise<TimeSlot[]> {
-  const service = await prisma.service.findFirst({
+  const service = await db.service.findFirst({
     where: { id: serviceId, establishmentId, active: true },
   });
 
   if (!service) {
-    throw new Error("Serviço não encontrado ou inativo para este estabelecimento.");
+    throw new ServiceNotFoundError();
   }
 
   const duration = service.durationMinutes;
@@ -84,7 +100,7 @@ export async function getAvailableSlots({
 
   const dayOfWeek = date.getDay();
 
-  const businessHours = await prisma.businessHour.findMany({
+  const businessHours = await db.businessHour.findMany({
     where: { establishmentId, dayOfWeek },
     orderBy: { startTime: "asc" },
   });
@@ -99,7 +115,7 @@ export async function getAvailableSlots({
   // Busca de uma vez só tudo que pode colidir com o dia pesquisado, em vez
   // de uma query por slot candidato.
   const [appointments, blockedSlots] = await Promise.all([
-    prisma.appointment.findMany({
+    db.appointment.findMany({
       where: {
         establishmentId,
         status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
@@ -108,7 +124,7 @@ export async function getAvailableSlots({
       },
       select: { startsAt: true, endsAt: true },
     }),
-    prisma.blockedSlot.findMany({
+    db.blockedSlot.findMany({
       where: {
         establishmentId,
         startsAt: { lt: dayEnd },

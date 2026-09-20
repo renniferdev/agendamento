@@ -101,14 +101,28 @@ onboardingRouter.post("/establishment", async (req, res, next) => {
   }
 });
 
-/** GET /onboarding/status — o front usa para decidir se mostra o formulário. */
-onboardingRouter.get("/status", (req, res) => {
-  const user = req.authUser!;
-  res.json({
-    onboarded: user.establishmentId !== null,
-    establishmentId: user.establishmentId,
-    role: user.role,
-  });
+/**
+ * GET /onboarding/status — o front usa para decidir se mostra o formulário e,
+ * depois do onboarding, para montar o link público (/:slug) no painel.
+ */
+onboardingRouter.get("/status", async (req, res, next) => {
+  try {
+    const user = req.authUser!;
+    const establishment = user.establishmentId
+      ? await prisma.establishment.findUnique({
+          where: { id: user.establishmentId },
+          select: { name: true, slug: true },
+        })
+      : null;
+    res.json({
+      onboarded: user.establishmentId !== null,
+      establishmentId: user.establishmentId,
+      role: user.role,
+      establishment,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 class AlreadyOnboardedError extends Error {

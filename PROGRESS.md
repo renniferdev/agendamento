@@ -1,7 +1,7 @@
 # PROGRESS.md — Sistema de Agendamento (SaaS multi-tenant)
 
 > Log de decisões e progresso do projeto. Atualizado conforme o desenvolvimento avança.
-> Última atualização: 2026-09-07 (horários de funcionamento e bloqueios, backend + front)
+> Última atualização: 2026-09-07 (página pública de agendamento + e-mails + lista de agendamentos no painel)
 
 ## 1. Visão geral do projeto
 
@@ -19,7 +19,7 @@ painel administrativo para gerenciar serviços, horários e agendamentos.
 | E-mail transacional | Resend | Confirmação de agendamento, notificações |
 | Autenticação | Auth.js (`@auth/express` + `@auth/prisma-adapter`) | Login do painel admin (e-mail/senha via `bcryptjs` e login com Google) |
 | Back-end | Node.js + Express + TypeScript (`tsx`) | API REST |
-| Front-end | React 18 + TypeScript + Vite 6 + Tailwind CSS 4 + React Router 6 | Login/cadastro, onboarding, painel admin (serviços, horários, bloqueios); página pública ainda não |
+| Front-end | React 18 + TypeScript + Vite 6 + Tailwind CSS 4 + React Router 6 | Login/cadastro, onboarding, painel admin (serviços, horários, bloqueios, agendamentos) e página pública `/:slug` do cliente final |
 
 Repositório dividido em `back-end/` e `front-end/` na raiz do projeto.
 
@@ -103,11 +103,52 @@ Repositório dividido em `back-end/` e `front-end/` na raiz do projeto.
   considerar.
 - **Preço em centavos (`priceCents: Int`)** em vez de tipo decimal/float,
   para evitar problemas de arredondamento com ponto flutuante.
+- **Reserva pública revalida o horário no servidor e serializa por
+  estabelecimento com `SELECT ... FOR UPDATE`.** O `POST
+  /establishments/:slug/appointments` nunca confia no horário que o front
+  mandou: dentro de uma transação interativa do Prisma ele (1) trava a
+  linha do `Establishment` (`FOR UPDATE`), (2) recalcula os slots livres com
+  o MESMO `getAvailableSlots` da rota de disponibilidade, passando o `tx`,
+  (3) exige que `startsAt` seja exatamente o início de um slot livre e só
+  então (4) faz upsert do `Customer` e cria o `Appointment`. Duas
+  requisições simultâneas para o mesmo horário entram em fila no lock; a
+  segunda só revalida depois do commit da primeira, enxerga o agendamento
+  novo e recebe 409 `SLOT_UNAVAILABLE`. Estabelecimentos diferentes travam
+  linhas diferentes e não se bloqueiam. Alternativas consideradas: (a)
+  checar e inserir sem lock — perde a corrida (as duas leituras veem o
+  slot livre); (b) `EXCLUDE USING gist` no Postgres (constraint de
+  não-sobreposição) — o mais robusto, mas exige a extensão `btree_gist` e
+  migração SQL à mão, e não cobre a regra "tem que ser início de slot";
+  fica como evolução se o lock por tenant virar gargalo (improvável no
+  porte atual: o lock dura o tempo de uma transação de poucos ms).
+- **Agendamento nasce `CONFIRMED`, não `PENDING`.** O cliente só consegue
+  escolher um horário que está livre, e não há fluxo de aprovação pelo
+  dono no MVP; o e-mail diz "confirmado" e a lista do painel também. O
+  status `PENDING` continua no enum para um futuro fluxo de aprovação.
+- **Cliente identificado por telefone dentro do estabelecimento**
+  (`@@unique([establishmentId, phone])`, telefone normalizado para só
+  dígitos, 10 ou 11). Isso permite o `upsert` atômico do `Customer` na
+  mesma transação da reserva (cliente recorrente reaproveita o cadastro e
+  tem nome/e-mail atualizados). E-mail do cliente é opcional: no Brasil o
+  telefone/WhatsApp é o contato principal; sem e-mail o agendamento é
+  salvo normalmente e só a confirmação por e-mail deixa de ser enviada.
+- **E-mails (Resend) são disparados DEPOIS da resposta 201 e nunca
+  falham a reserva.** `sendAppointmentEmails` usa `Promise.allSettled` e
+  só loga; a rota chama com `void`. Remetente vem de `EMAIL_FROM` (default
+  `onboarding@resend.dev`, que sem domínio verificado só entrega para o
+  e-mail do dono da conta Resend — outros destinatários viram
+  `validation_error` no log, comportamento esperado em dev).
+- **Link público exibido no painel.** `GET /onboarding/status` passou a
+  devolver `establishment: { name, slug }` e o `AdminLayout` mostra
+  `origin/slug` com botão "Copiar" — sem isso o dono não teria como saber
+  o endereço para mandar aos clientes.
 
 ## 3. Schema do banco de dados (Prisma)
 
-Definido em [back-end/prisma/schema.prisma](back-end/prisma/schema.prisma),
-migração inicial aplicada: `20260907143954_init`.
+Definido em [back-end/prisma/schema.prisma](back-end/prisma/schema.prisma).
+Migrações aplicadas: `20260907143954_init` e
+`20260907180000_customer_email_unique_phone` (adiciona `Customer.email`
+opcional e troca o índice `[establishmentId, phone]` por UNIQUE).
 
 - **`Establishment`** — o tenant. Nome, `slug` único, cor primária, logo,
   telefone. Ponto central do isolamento multi-tenant: todas as tabelas de
@@ -121,8 +162,9 @@ migração inicial aplicada: `20260907143954_init`.
   sessões ativas, tokens de verificação de e-mail).
 - **`Service`** — serviços oferecidos pelo estabelecimento (nome, duração em
   minutos, preço em centavos, ativo/inativo).
-- **`Customer`** — clientes finais que agendam (nome, telefone), isolados
-  por `establishmentId`.
+- **`Customer`** — clientes finais que agendam (nome, telefone só dígitos,
+  e-mail opcional), isolados por `establishmentId`; telefone é único
+  dentro do estabelecimento.
 - **`Appointment`** — o agendamento em si: cliente, serviço, início/fim,
   status (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`).
 - **`BlockedSlot`** — bloqueios administrativos de horário (ver seção 2).
@@ -181,10 +223,17 @@ Com isso, `npx prisma migrate dev --name init` completou com sucesso
      entrada (host atualizado) no arquivo hosts do sistema operacional
      (`/etc/hosts` no Linux/macOS, `C:\Windows\System32\drivers\etc\hosts`
      no Windows).
-  4. Alternativa sem editar o hosts: forçar IPv4 no Node/Prisma (ex:
-     variável de ambiente `NODE_OPTIONS=--dns-result-order=ipv4first` no
-     Node 18+), o que evita depender de uma entrada manual e específica de
-     IP.
+  4. **Não funciona** como alternativa: `NODE_OPTIONS=--dns-result-order=
+     ipv4first` / `dns.setDefaultResultOrder("ipv4first")`. Testado em
+     2026-09-07 num clone novo desta máquina: o query engine do Prisma é
+     um binário Rust que resolve DNS por conta própria, fora do módulo
+     `dns` do Node, e continuou dando `Can't reach database server`. A
+     entrada no `hosts` é, hoje, a única correção que cobre o Prisma
+     (servidor e CLI de migração). Ela teve que ser recriada ao clonar o
+     projeto nesta máquina — é por isso que, num clone novo, login com
+     Google ("problema com a configuração do servidor", porque o adapter
+     não alcança o banco) e cadastro (500) falham até o hosts ser
+     ajustado.
 
 ## 5. Status atual
 
@@ -326,6 +375,66 @@ Com isso, `npx prisma migrate dev --name init` completou com sucesso
   que fazer ("Remova-a primeiro ou ajuste o horário"). A validação em si
   não mudou.
 
+- **Agendamento pelo cliente final (backend)**
+  (`back-end/src/routes/publicEstablishments.ts`, público, montado em
+  `/establishments` ao lado da disponibilidade):
+  - `GET /establishments/:slug` — nome, slug, cor primária, logo, telefone
+    e serviços ativos (id, nome, duração, preço). 404 para slug inexistente.
+  - `POST /establishments/:slug/appointments` — `serviceId`,
+    `customerName`, `customerPhone` (normalizado para dígitos, 10–11),
+    `customerEmail` opcional, `startsAt` (ISO). Transação com `FOR UPDATE`
+    + revalidação via `getAvailableSlots` (ver decisões). Erros: 400 dados
+    inválidos, 404 estabelecimento/serviço, 409 `SLOT_UNAVAILABLE` para
+    horário ocupado, fora do funcionamento, no passado ou que não é início
+    de slot. Resposta 201 com serviço, cliente e estabelecimento para a
+    tela de confirmação. Depois da resposta dispara os e-mails
+    (`back-end/src/lib/email.ts`): confirmação para o cliente (se deu
+    e-mail) e aviso para o `User` ADMIN do estabelecimento.
+  - `getAvailableSlots` ganhou o parâmetro opcional `db` (client da
+    transação) e passou a lançar `ServiceNotFoundError` tipado em vez de
+    `Error` genérico (a rota de disponibilidade usa `instanceof`).
+- **Painel: agendamentos** (`back-end/src/routes/appointments.ts`,
+  `/admin/appointments`, `requireAdmin`): `GET ?from=&to=` (default: de
+  hoje em diante, até 200, com cliente e serviço) e `PATCH /:id/cancel`
+  (409 se já cancelado/concluído). Cancelar libera o slot na
+  disponibilidade.
+- **Testado via curl** (`back-end/scripts/test-booking.sh`, 17 passos,
+  cria e apaga seus próprios dados): dados públicos 200 / slug 404; janela
+  09–12 amanhã → 6 slots de 30 min; agendamento 201; mesmo horário 409;
+  slot some da disponibilidade; 20:00 (fora do horário) 409; passado 409;
+  `+7min` (não é início de slot) 409; telefone `123` 400; serviço
+  inexistente 404; **corrida: 6 `curl` em paralelo no mesmo slot → 1×201 e
+  5×409**; lista do painel com 2; cancelar 200 e o slot volta; cancelar de
+  novo 409. E-mail real testado: confirmação chegou no e-mail do dono da
+  conta Resend; destinatário `@example.com` recusado pelo Resend e apenas
+  logado, com o agendamento salvo (201) mesmo assim.
+- **Front — página pública `/:slug`**
+  (`front-end/src/pages/PublicBookingPage.tsx`, rota sem guard em
+  `App.tsx`; segmentos estáticos como `/login` e `/admin` têm prioridade
+  no React Router e o onboarding recusa slugs reservados). Header com a
+  cor primária e logo do estabelecimento; a cor também marca o serviço
+  escolhido, o horário selecionado, os números dos passos e o botão de
+  confirmar. Três passos: serviços (nome, duração, preço) → data
+  (`<input type="date">`, mínimo hoje) + grade de horários da rota de
+  disponibilidade → nome, telefone (WhatsApp) e e-mail opcional, com
+  resumo do que está sendo agendado. Tela de confirmação com serviço,
+  data/hora, valor e telefone do estabelecimento. Em 409
+  `SLOT_UNAVAILABLE` mostra a mensagem do backend, recarrega os horários e
+  volta para a escolha. Slug inexistente → "Página não encontrada".
+- **Front — `/admin/agendamentos`**
+  (`front-end/src/pages/AdminAppointmentsPage.tsx`): tabela (quando,
+  cliente com telefone formatado e e-mail, serviço, status, "Cancelar"
+  com confirmação) filtrada por "A partir de" (default hoje). Link
+  "Agendamentos" no `AdminLayout`, que também exibe o link público com
+  "Copiar".
+- **Validado no navegador com Playwright** (script descartável, dados
+  apagados ao final): cliente agenda 14:30 e vê a confirmação; com o
+  formulário aberto no 16:00, "outro cliente" reserva o 16:00 via API →
+  ao confirmar aparece "Este horário acabou de ficar indisponível", a
+  grade atualiza só com 16:30 e a reserva no 16:30 confirma; dono loga, vê
+  o link público no topo e os 4 agendamentos em `/admin/agendamentos`.
+  `tsc --noEmit` limpo nos dois projetos.
+
 **Como rodar e testar (dev):**
 
 ```
@@ -351,15 +460,41 @@ cd front-end && npm run dev       # http://localhost:5173
    `http://localhost:3333/establishments/<slug>/availability?serviceId=<id>&date=<amanhã YYYY-MM-DD>`
    e ver os slots mudarem ao mexer em horários/bloqueios.
 
+**Fluxo ponta a ponta do MVP (dono → cliente → dono), no navegador:**
+
+1. **Dono**: logado em `/admin`, cadastre um serviço (ex: "Corte", 30 min)
+   e em `/admin/horarios` uma janela para amanhã (ex: 09:00–12:00). No
+   topo do painel aparece "Link de agendamento dos seus clientes:
+   `http://localhost:5173/<slug>`" — clique em "Copiar" (ou "abrir em
+   nova aba").
+2. **Cliente** (aba anônima, sem login): abra o link. Header com a cor do
+   estabelecimento. Passo 1: clique no serviço. Passo 2: escolha a data
+   de amanhã; os horários livres aparecem (09:00, 09:30, ...). Clique num
+   horário. Passo 3: nome, telefone e (opcional) e-mail — use o e-mail do
+   dono da conta Resend se quiser ver a confirmação chegar. "Confirmar
+   agendamento" → tela verde "Agendamento confirmado!".
+3. **Corrida** (opcional): abra o link em duas abas, escolha o mesmo
+   horário nas duas, confirme na primeira e depois na segunda → a segunda
+   mostra "Este horário acabou de ficar indisponível. Escolha outro
+   horário." e a grade recarrega sem aquele horário.
+4. **Dono**: em `/admin/agendamentos` o agendamento aparece com cliente,
+   telefone, serviço e status "Confirmado". "Cancelar" pede confirmação,
+   muda o status e o horário volta a aparecer para os clientes. O e-mail
+   "Novo agendamento" chega ao e-mail do usuário ADMIN (em dev, só se ele
+   for o dono da conta Resend — senão fica só no log do backend).
+5. Roteiro automatizado equivalente via curl:
+   `EMAIL=... PASS=... SLUG=... bash back-end/scripts/test-booking.sh`.
+
 **Falta (próximas etapas planejadas):**
-- Testar as quatro telas num navegador de verdade (o fluxo HTTP foi
-  validado via curl, mas não a UI) e o login com Google ponta a ponta.
-- Fluxo de criação de agendamento pelo cliente final (`POST` de
-  `Appointment` reaproveitando `getAvailableSlots` para validar o horário
-  escolhido) + envio de e-mail de confirmação via Resend, e a página
-  pública `/:slug` no front.
-- Tratar `?error=` de OAuth na tela de login (hoje um erro do Google cai
-  na página padrão do Auth.js no backend).
+- Login com Google ponta a ponta no navegador (exige a URI de redirect no
+  console do Google Cloud) e tratar `?error=` de OAuth na tela de login
+  (hoje um erro do Google cai na página padrão do Auth.js no backend).
+- Upload/URL de logo e escolha da cor primária no painel (hoje o schema e
+  a página pública já usam `primaryColor`/`logoUrl`, mas só o default
+  `#4F46E5` é gravado no onboarding — falta a tela de "Aparência").
+- Cancelamento/remarcação pelo próprio cliente (link no e-mail) e
+  lembrete por e-mail antes do horário.
+- Domínio verificado no Resend + `EMAIL_FROM` de produção.
 - Configuração de deploy na Vercel (variáveis de ambiente de produção,
   cookies cross-site se front e API ficarem em hosts diferentes,
   `AUTH_TRUST_HOST`, confirmar que a conexão com o Neon funciona sem o
@@ -367,7 +502,7 @@ cd front-end && npm run dev       # http://localhost:5173
 
 ## 6. Próxima etapa
 
-1. Página pública `/:slug` (lista de serviços + calendário de slots livres
-   via `/establishments/:slug/availability`) + `POST` de agendamento no
-   backend (revalidando o slot com `getAvailableSlots` para evitar corrida)
-   + e-mail de confirmação via Resend.
+1. Tela "Aparência" no painel (cor primária + URL do logo) para o dono
+   personalizar a página pública sem depender do default — é o que fecha
+   a promessa de "fácil de vender pro próximo cliente".
+2. Preparar o deploy (Vercel + Neon + Resend com domínio verificado).

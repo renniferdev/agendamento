@@ -141,13 +141,14 @@ model Customer {
   id              String   @id @default(cuid())
   establishmentId String   @map("establishment_id")
   name            String
-  phone           String
+  phone           String   // só dígitos (normalizado na API); identifica o cliente dentro do estabelecimento
+  email           String?  // opcional: usado só para enviar a confirmação
   createdAt       DateTime @default(now()) @map("created_at")
 
   establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
 
-  @@index([establishmentId, phone])
+  @@unique([establishmentId, phone])
   @@map("customers")
 }
 

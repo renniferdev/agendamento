@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { getAvailableSlots } from "../lib/availability";
+import { getAvailableSlots, ServiceNotFoundError } from "../lib/availability";
 
 export const availabilityRouter = Router();
 
@@ -58,7 +58,7 @@ availabilityRouter.get("/:slug/availability", async (req, res, next) => {
       res.status(400).json({ error: "Parâmetros inválidos.", details: err.issues });
       return;
     }
-    if (err instanceof Error && err.message.includes("não encontrado")) {
+    if (err instanceof ServiceNotFoundError) {
       res.status(404).json({ error: err.message });
       return;
     }

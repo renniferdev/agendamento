@@ -11,6 +11,7 @@ export interface OnboardingStatus {
   onboarded: boolean;
   establishmentId: string | null;
   role: "ADMIN" | "STAFF";
+  establishment: { name: string; slug: string } | null;
 }
 
 /**

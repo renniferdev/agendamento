@@ -9,6 +9,8 @@ import { onboardingRouter } from "./routes/onboarding";
 import { registerRouter } from "./routes/register";
 import { businessHoursRouter } from "./routes/businessHours";
 import { blockedSlotsRouter } from "./routes/blockedSlots";
+import { publicEstablishmentsRouter } from "./routes/publicEstablishments";
+import { appointmentsRouter } from "./routes/appointments";
 import { FRONTEND_URL } from "./lib/auth";
 
 const app = express();
@@ -30,6 +32,7 @@ app.use("/auth/*", ExpressAuth(authConfig));
 
 // Rotas públicas consumidas pela página de agendamento do cliente final.
 app.use("/establishments", availabilityRouter);
+app.use("/establishments", publicEstablishmentsRouter);
 
 // Onboarding: exige login, mas NÃO exige estabelecimento (é aqui que ele é criado).
 app.use("/onboarding", onboardingRouter);
@@ -38,6 +41,7 @@ app.use("/onboarding", onboardingRouter);
 app.use("/admin/services", servicesRouter);
 app.use("/admin/business-hours", businessHoursRouter);
 app.use("/admin/blocked-slots", blockedSlotsRouter);
+app.use("/admin/appointments", appointmentsRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
