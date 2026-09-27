@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { getAvailableSlots, ServiceNotFoundError } from "../lib/availability";
 import { sendAppointmentEmails } from "../lib/email";
+import { requireCustomer } from "../middleware/requireCustomer";
 
 /**
  * Rotas públicas da página de agendamento do cliente final (sem login).
@@ -40,18 +41,6 @@ publicEstablishmentsRouter.get("/:slug", async (req, res, next) => {
 
 const bookingSchema = z.object({
   serviceId: z.string().min(1),
-  customerName: z.string().trim().min(2, "Informe seu nome").max(120),
-  customerPhone: z
-    .string()
-    .transform((v) => v.replace(/\D/g, ""))
-    .refine((v) => v.length === 10 || v.length === 11, "Telefone deve ter DDD + número (10 ou 11 dígitos)"),
-  customerEmail: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .email("E-mail inválido")
-    .optional()
-    .or(z.literal("").transform(() => undefined)),
   startsAt: z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), "Data/hora inválida"),
 });
 
@@ -75,7 +64,7 @@ class SlotUnavailableError extends Error {
  * novo agendamento e recebe 409 SLOT_UNAVAILABLE. Reservas de
  * estabelecimentos diferentes não se bloqueiam.
  */
-publicEstablishmentsRouter.post("/:slug/appointments", async (req, res, next) => {
+publicEstablishmentsRouter.post("/:slug/appointments", requireCustomer, async (req, res, next) => {
   try {
     const data = bookingSchema.parse(req.body);
     const startsAt = new Date(data.startsAt);
@@ -88,6 +77,8 @@ publicEstablishmentsRouter.post("/:slug/appointments", async (req, res, next) =>
       res.status(404).json({ error: "Estabelecimento não encontrado." });
       return;
     }
+
+    const { customerId } = req.customer!;
 
     const appointment = await prisma.$transaction(
       async (tx) => {
@@ -102,24 +93,10 @@ publicEstablishmentsRouter.post("/:slug/appointments", async (req, res, next) =>
         const slot = slots.find((s) => s.start.getTime() === startsAt.getTime());
         if (!slot) throw new SlotUnavailableError();
 
-        const customer = await tx.customer.upsert({
-          where: {
-            establishmentId_phone: { establishmentId: establishment.id, phone: data.customerPhone },
-          },
-          create: {
-            establishmentId: establishment.id,
-            name: data.customerName,
-            phone: data.customerPhone,
-            email: data.customerEmail,
-          },
-          // Cliente recorrente: mantém o cadastro atualizado com o que digitou agora.
-          update: { name: data.customerName, email: data.customerEmail ?? undefined },
-        });
-
         return tx.appointment.create({
           data: {
             establishmentId: establishment.id,
-            customerId: customer.id,
+            customerId,
             serviceId: data.serviceId,
             startsAt: slot.start,
             endsAt: slot.end,

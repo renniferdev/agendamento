@@ -48,7 +48,7 @@ export function OnboardingPage() {
   return (
     <CenteredPage>
       <Card title="Cadastre seu estabelecimento">
-        <p className="mb-4 text-sm text-gray-600">
+        <p className="mb-4 text-sm text-ink-soft">
           Olá, {user?.name ?? user?.email}. Falta só um passo para acessar o painel.
         </p>
 
@@ -92,7 +92,7 @@ export function OnboardingPage() {
         <button
           type="button"
           onClick={() => void signOut()}
-          className="mt-6 w-full text-center text-sm text-gray-500 hover:underline"
+          className="mt-6 w-full text-center text-sm text-muted hover:underline"
         >
           Sair
         </button>

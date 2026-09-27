@@ -109,7 +109,7 @@ export function AdminSchedulePage() {
     <AdminLayout title="Horários de funcionamento e bloqueios">
       {error && <Alert>{error}</Alert>}
       {loading ? (
-        <p className="text-sm text-gray-500">Carregando...</p>
+        <p className="text-sm text-muted">Carregando...</p>
       ) : (
         <>
           <BusinessHoursSection hours={hours} onChange={run} />
@@ -133,8 +133,8 @@ function BusinessHoursSection({
 }) {
   return (
     <section className="space-y-3">
-      <h2 className="font-medium text-gray-900">Horários de funcionamento</h2>
-      <p className="text-sm text-gray-500">
+      <h2 className="font-display text-lg text-ink">Horários de funcionamento</h2>
+      <p className="text-sm text-muted">
         Dias sem janela não recebem agendamentos. Não há botão "salvar": cada janela é gravada
         assim que você clica em "+".
       </p>
@@ -190,26 +190,26 @@ function DayCard({
 
   return (
     <div
-      className={`rounded-lg border bg-white p-3 transition-colors duration-500 ${
-        feedback.saved ? "border-green-400 bg-green-50" : "border-gray-200"
+      className={`rounded border bg-white p-3 transition-colors duration-500 ${
+        feedback.saved ? "border-success/40 bg-success-light" : "border-line"
       }`}
     >
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-medium text-gray-800">{name}</span>
+        <span className="font-medium text-ink">{name}</span>
         {feedback.saved ? (
-          <span className="text-xs font-medium text-green-700">Salvo ✓</span>
+          <span className="text-xs font-medium text-success">Salvo ✓</span>
         ) : windows.length === 0 ? (
-          <span className="text-xs text-gray-400">Fechado</span>
+          <span className="text-xs text-muted">Fechado</span>
         ) : null}
       </div>
 
       <ul className="mb-2 space-y-1">
         {windows.map((w) => (
           <li key={w.id} className="flex items-center justify-between text-sm">
-            <span>
+            <span className="font-mono">
               {w.startTime} – {w.endTime}
             </span>
-            <button className="text-xs text-red-600 hover:underline" onClick={() => void remove(w.id)}>
+            <button className="text-xs text-danger hover:underline" onClick={() => void remove(w.id)}>
               Remover
             </button>
           </li>
@@ -240,9 +240,9 @@ function DayCard({
         </Button>
       </form>
 
-      {feedback.error && <p className="mt-2 text-xs text-red-600">{feedback.error}</p>}
+      {feedback.error && <p className="mt-2 text-xs text-danger">{feedback.error}</p>}
 
-      <p className="mt-2 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-muted">
         Cada janela é salva na hora ao clicar em "+". Para intervalo de almoço, cadastre duas
         janelas separadas (ex: 09:00–12:00 e 13:00–18:00) em vez de uma única.
       </p>
@@ -293,14 +293,14 @@ function BlockedSlotsSection({
 
   return (
     <section className="space-y-3">
-      <h2 className="font-medium text-gray-900">Bloqueios</h2>
-      <p className="text-sm text-gray-500">
+      <h2 className="font-display text-lg text-ink">Bloqueios</h2>
+      <p className="text-sm text-muted">
         Folgas, feriados, manutenção. O período bloqueado some da disponibilidade mesmo dentro do horário de funcionamento.
       </p>
 
       <form
         onSubmit={add}
-        className="grid gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
+        className="grid gap-3 rounded border border-line bg-white p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
       >
         <Field
           label="Início"
@@ -330,23 +330,23 @@ function BlockedSlotsSection({
         </Button>
       </form>
 
-      {feedback.saved && <p className="text-xs font-medium text-green-700">Salvo ✓</p>}
-      {feedback.error && <p className="text-xs text-red-600">{feedback.error}</p>}
+      {feedback.saved && <p className="text-xs font-medium text-success">Salvo ✓</p>}
+      {feedback.error && <p className="text-xs text-danger">{feedback.error}</p>}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="rounded border border-line bg-white">
         {slots.length === 0 ? (
-          <p className="p-3 text-sm text-gray-500">Nenhum bloqueio futuro.</p>
+          <p className="p-3 text-sm text-muted">Nenhum bloqueio futuro.</p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-line/60">
             {slots.map((s) => (
               <li key={s.id} className="flex items-center justify-between px-3 py-2 text-sm">
                 <div>
-                  <span>
+                  <span className="font-mono">
                     {dateTimeFmt.format(new Date(s.startsAt))} → {dateTimeFmt.format(new Date(s.endsAt))}
                   </span>
-                  {s.reason && <span className="ml-2 text-gray-500">({s.reason})</span>}
+                  {s.reason && <span className="ml-2 text-muted">({s.reason})</span>}
                 </div>
-                <button className="text-xs text-red-600 hover:underline" onClick={() => void remove(s.id)}>
+                <button className="text-xs text-danger hover:underline" onClick={() => void remove(s.id)}>
                   Remover
                 </button>
               </li>

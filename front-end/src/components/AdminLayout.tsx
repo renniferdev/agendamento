@@ -27,25 +27,27 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white">
+    <div className="min-h-screen bg-paper">
+      <header className="border-b border-line bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <nav className="flex items-center gap-4">
-            <span className="font-semibold text-gray-900">Painel</span>
+          <nav className="flex items-center gap-5">
+            <span className="font-display text-lg text-ink">Painel</span>
             {links.map((l) => (
               <NavLink
                 key={l.to}
                 to={l.to}
                 end={l.end}
                 className={({ isActive }) =>
-                  `text-sm ${isActive ? "font-medium text-indigo-600" : "text-gray-600 hover:text-gray-900"}`
+                  `border-b-2 pb-0.5 text-sm ${
+                    isActive ? "border-teal font-medium text-ink" : "border-transparent text-muted hover:text-ink-soft"
+                  }`
                 }
               >
                 {l.label}
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-3 text-sm text-gray-600">
+          <div className="flex items-center gap-3 text-sm text-muted">
             <span className="hidden sm:inline">{user?.email}</span>
             <Button variant="secondary" onClick={() => void signOut()}>
               Sair
@@ -53,18 +55,18 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
           </div>
         </div>
         {publicUrl && (
-          <div className="border-t border-gray-100 bg-indigo-50">
+          <div className="border-t border-line bg-brass-light">
             <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm">
-              <span className="text-gray-600">Link de agendamento dos seus clientes:</span>
+              <span className="text-ink-soft">Link de agendamento dos seus clientes:</span>
               <a
                 href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-indigo-700 underline underline-offset-2"
+                className="font-mono text-brass underline underline-offset-2"
               >
                 {publicUrl}
               </a>
-              <button type="button" onClick={() => void copyLink()} className="text-indigo-700 hover:underline">
+              <button type="button" onClick={() => void copyLink()} className="text-brass hover:underline">
                 {copied ? "Copiado ✓" : "Copiar"}
               </button>
             </div>
@@ -73,7 +75,7 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
       </header>
 
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-        <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+        <h1 className="font-display text-2xl text-ink">{title}</h1>
         {children}
       </main>
     </div>

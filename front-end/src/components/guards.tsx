@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 
 function Loading() {
   return (
-    <div className="flex min-h-screen items-center justify-center text-gray-500">
+    <div className="flex min-h-screen items-center justify-center bg-paper text-muted">
       Carregando...
     </div>
   );

@@ -70,9 +70,9 @@ export function RegisterPage() {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
+        <p className="mt-6 text-center text-sm text-ink-soft">
           Já tem conta?{" "}
-          <Link to="/login" className="font-medium text-indigo-600 hover:underline">
+          <Link to="/login" className="font-medium text-teal hover:underline">
             Entrar
           </Link>
         </p>

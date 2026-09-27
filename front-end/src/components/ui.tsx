@@ -2,19 +2,15 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react
 
 export function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h1 className="mb-4 text-xl font-semibold text-gray-900">{title}</h1>
+    <div className="w-full max-w-md rounded border border-line bg-white p-6">
+      <h1 className="mb-5 font-display text-2xl font-medium text-ink">{title}</h1>
       {children}
     </div>
   );
 }
 
 export function CenteredPage({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-      {children}
-    </div>
-  );
+  return <div className="flex min-h-screen items-center justify-center bg-paper p-4">{children}</div>;
 }
 
 interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -26,13 +22,13 @@ export function Field({ label, hint, id, ...props }: FieldProps) {
   const inputId = id ?? props.name;
   return (
     <label htmlFor={inputId} className="block">
-      <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
+      <span className="mb-1.5 block text-sm text-ink-soft">{label}</span>
       <input
         id={inputId}
-        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 disabled:bg-gray-100"
+        className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal-light disabled:bg-paper-dim"
         {...props}
       />
-      {hint && <span className="mt-1 block text-xs text-gray-500">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-xs text-muted">{hint}</span>}
     </label>
   );
 }
@@ -43,13 +39,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
   const styles = {
-    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
-    secondary: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
+    primary: "bg-teal text-white hover:bg-teal-dark",
+    secondary: "border border-line bg-white text-ink-soft hover:border-ink-soft/40",
+    danger: "bg-danger text-white hover:bg-danger/90",
   }[variant];
   return (
     <button
-      className={`rounded-md px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`}
+      className={`rounded px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`}
       {...props}
     />
   );
@@ -57,8 +53,6 @@ export function Button({ variant = "primary", className = "", ...props }: Button
 
 export function Alert({ kind = "error", children }: { kind?: "error" | "success"; children: ReactNode }) {
   const styles =
-    kind === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : "border-green-200 bg-green-50 text-green-700";
-  return <div className={`rounded-md border px-3 py-2 text-sm ${styles}`}>{children}</div>;
+    kind === "error" ? "border-danger/25 bg-danger-light text-danger" : "border-success/25 bg-success-light text-success";
+  return <div className={`rounded border px-3 py-2 text-sm ${styles}`}>{children}</div>;
 }

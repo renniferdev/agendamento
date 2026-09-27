@@ -70,19 +70,19 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <div className="my-4 flex items-center gap-3 text-xs text-gray-400">
-          <div className="h-px flex-1 bg-gray-200" />
+        <div className="my-4 flex items-center gap-3 text-xs text-muted">
+          <div className="h-px flex-1 bg-line" />
           ou
-          <div className="h-px flex-1 bg-gray-200" />
+          <div className="h-px flex-1 bg-line" />
         </div>
 
         <Button type="button" variant="secondary" className="w-full" onClick={handleGoogle}>
           Entrar com Google
         </Button>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
+        <p className="mt-6 text-center text-sm text-ink-soft">
           Não tem conta?{" "}
-          <Link to="/registro" className="font-medium text-indigo-600 hover:underline">
+          <Link to="/registro" className="font-medium text-teal hover:underline">
             Cadastre-se
           </Link>
         </p>

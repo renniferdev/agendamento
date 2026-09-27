@@ -137,18 +137,24 @@ model Service {
   @@map("services")
 }
 
+// Conta de login do cliente final, escopada por estabelecimento — a mesma
+// pessoa cria uma conta (e-mail/senha) separada em cada barbearia que usa o
+// sistema. Não usa o Auth.js/@auth/prisma-adapter do User; ver
+// lib/customerAuth.ts (JWT próprio, cookie `customer_session`).
 model Customer {
   id              String   @id @default(cuid())
   establishmentId String   @map("establishment_id")
   name            String
-  phone           String   // só dígitos (normalizado na API); identifica o cliente dentro do estabelecimento
-  email           String?  // opcional: usado só para enviar a confirmação
+  phone           String   // só dígitos (normalizado na API); único por estabelecimento
+  email           String   // login do cliente; único por estabelecimento
+  passwordHash    String   @map("password_hash")
   createdAt       DateTime @default(now()) @map("created_at")
 
   establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
 
   @@unique([establishmentId, phone])
+  @@unique([establishmentId, email])
   @@map("customers")
 }
 

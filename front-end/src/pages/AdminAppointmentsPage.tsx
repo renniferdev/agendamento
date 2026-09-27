@@ -79,35 +79,35 @@ export function AdminAppointmentsPage() {
         <Field label="A partir de" name="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
       </div>
 
-      <section className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <section className="overflow-x-auto rounded border border-line bg-white">
         {loading ? (
-          <p className="p-4 text-sm text-gray-500">Carregando...</p>
+          <p className="p-4 text-sm text-muted">Carregando...</p>
         ) : items.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500">Nenhum agendamento a partir dessa data.</p>
+          <p className="p-4 text-sm text-muted">Nenhum agendamento a partir dessa data.</p>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="border-b border-line text-ink-soft">
               <tr>
-                <th className="px-4 py-2">Quando</th>
-                <th className="px-4 py-2">Cliente</th>
-                <th className="px-4 py-2">Serviço</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2 text-right">Ações</th>
+                <th className="px-4 py-2 font-medium">Quando</th>
+                <th className="px-4 py-2 font-medium">Cliente</th>
+                <th className="px-4 py-2 font-medium">Serviço</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 text-right font-medium">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-line/60">
               {items.map((a) => {
                 const inactive = a.status === "CANCELLED" || a.status === "COMPLETED";
                 return (
-                  <tr key={a.id} className={inactive ? "text-gray-400" : ""}>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <div className="font-medium">{dateFmt.format(new Date(a.startsAt))}</div>
+                  <tr key={a.id} className={inactive ? "text-muted" : ""}>
+                    <td className="px-4 py-2 font-mono whitespace-nowrap">
+                      <div className="font-medium text-ink">{dateFmt.format(new Date(a.startsAt))}</div>
                       <div>
                         {timeFmt.format(new Date(a.startsAt))} – {timeFmt.format(new Date(a.endsAt))}
                       </div>
                     </td>
                     <td className="px-4 py-2">
-                      <div className="font-medium">{a.customer.name}</div>
+                      <div className="font-medium text-ink">{a.customer.name}</div>
                       <div className="text-xs">{formatPhone(a.customer.phone)}</div>
                       {a.customer.email && <div className="text-xs">{a.customer.email}</div>}
                     </td>
@@ -120,7 +120,7 @@ export function AdminAppointmentsPage() {
                     <td className="px-4 py-2">{STATUS_LABEL[a.status]}</td>
                     <td className="px-4 py-2 text-right">
                       {!inactive && (
-                        <button className="text-red-600 hover:underline" onClick={() => void cancel(a)}>
+                        <button className="text-danger hover:underline" onClick={() => void cancel(a)}>
                           Cancelar
                         </button>
                       )}

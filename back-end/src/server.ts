@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { ExpressAuth } from "@auth/express";
 import { authConfig } from "./lib/auth";
 import { availabilityRouter } from "./routes/availability";
@@ -10,6 +11,7 @@ import { registerRouter } from "./routes/register";
 import { businessHoursRouter } from "./routes/businessHours";
 import { blockedSlotsRouter } from "./routes/blockedSlots";
 import { publicEstablishmentsRouter } from "./routes/publicEstablishments";
+import { customerAuthRouter } from "./routes/customerAuth";
 import { appointmentsRouter } from "./routes/appointments";
 import { FRONTEND_URL } from "./lib/auth";
 
@@ -20,9 +22,13 @@ const app = express();
 app.set("trust proxy", true);
 
 // `credentials: true` + origem explícita: o front (outra porta/domínio) envia
-// o cookie de sessão do Auth.js em cada fetch com `credentials: "include"`.
+// o cookie de sessão do Auth.js (e o `customer_session`) em cada fetch com
+// `credentials: "include"`.
 app.use(cors({ origin: FRONTEND_URL, credentials: true }));
 app.use(express.json());
+// Necessário para o middleware requireCustomer ler o cookie `customer_session`
+// (o Auth.js lê os próprios cookies direto do header, sem depender disso).
+app.use(cookieParser());
 
 // Cadastro por e-mail/senha — precisa vir ANTES do Auth.js, que captura /auth/*.
 app.use("/auth", registerRouter);
@@ -32,6 +38,7 @@ app.use("/auth/*", ExpressAuth(authConfig));
 
 // Rotas públicas consumidas pela página de agendamento do cliente final.
 app.use("/establishments", availabilityRouter);
+app.use("/establishments", customerAuthRouter);
 app.use("/establishments", publicEstablishmentsRouter);
 
 // Onboarding: exige login, mas NÃO exige estabelecimento (é aqui que ele é criado).

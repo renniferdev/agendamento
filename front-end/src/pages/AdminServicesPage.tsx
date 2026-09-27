@@ -126,8 +126,8 @@ export function AdminServicesPage() {
     <AdminLayout title="Serviços">
         {error && <Alert>{error}</Alert>}
 
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 font-medium text-gray-900">
+        <section className="rounded border border-line bg-white p-4">
+          <h2 className="mb-3 font-display text-lg text-ink">
             {editingId ? "Editar serviço" : "Novo serviço"}
           </h2>
           <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-end">
@@ -170,37 +170,37 @@ export function AdminServicesPage() {
           </form>
         </section>
 
-        <section className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <section className="overflow-x-auto rounded border border-line bg-white">
           {loading ? (
-            <p className="p-4 text-sm text-gray-500">Carregando...</p>
+            <p className="p-4 text-sm text-muted">Carregando...</p>
           ) : services.length === 0 ? (
-            <p className="p-4 text-sm text-gray-500">Nenhum serviço cadastrado ainda.</p>
+            <p className="p-4 text-sm text-muted">Nenhum serviço cadastrado ainda.</p>
           ) : (
             <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+              <thead className="border-b border-line text-ink-soft">
                 <tr>
-                  <th className="px-4 py-2">Nome</th>
-                  <th className="px-4 py-2">Duração</th>
-                  <th className="px-4 py-2">Preço</th>
-                  <th className="px-4 py-2">Status</th>
-                  <th className="px-4 py-2 text-right">Ações</th>
+                  <th className="px-4 py-2 font-medium">Nome</th>
+                  <th className="px-4 py-2 font-medium">Duração</th>
+                  <th className="px-4 py-2 font-medium">Preço</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 text-right font-medium">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line/60">
                 {services.map((s) => (
-                  <tr key={s.id} className={s.active ? "" : "text-gray-400"}>
-                    <td className="px-4 py-2 font-medium">{s.name}</td>
-                    <td className="px-4 py-2">{s.durationMinutes} min</td>
-                    <td className="px-4 py-2">{brl.format(s.priceCents / 100)}</td>
+                  <tr key={s.id} className={s.active ? "" : "text-muted"}>
+                    <td className="px-4 py-2 font-medium text-ink">{s.name}</td>
+                    <td className="px-4 py-2 font-mono">{s.durationMinutes} min</td>
+                    <td className="px-4 py-2 font-mono">{brl.format(s.priceCents / 100)}</td>
                     <td className="px-4 py-2">{s.active ? "Ativo" : "Inativo"}</td>
-                    <td className="space-x-2 px-4 py-2 text-right whitespace-nowrap">
-                      <button className="text-indigo-600 hover:underline" onClick={() => startEdit(s)}>
+                    <td className="space-x-3 px-4 py-2 text-right whitespace-nowrap">
+                      <button className="text-teal hover:underline" onClick={() => startEdit(s)}>
                         Editar
                       </button>
-                      <button className="text-gray-600 hover:underline" onClick={() => void toggleActive(s)}>
+                      <button className="text-ink-soft hover:underline" onClick={() => void toggleActive(s)}>
                         {s.active ? "Desativar" : "Ativar"}
                       </button>
-                      <button className="text-red-600 hover:underline" onClick={() => void remove(s)}>
+                      <button className="text-danger hover:underline" onClick={() => void remove(s)}>
                         Excluir
                       </button>
                     </td>
