@@ -10,6 +10,7 @@ export function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -64,6 +65,27 @@ export function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+
+          <label className="flex items-start gap-2 text-sm text-ink-soft">
+            <input
+              type="checkbox"
+              required
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-line accent-teal"
+            />
+            <span>
+              Li e concordo com os{" "}
+              <Link to="/termos" target="_blank" className="font-medium text-teal hover:underline">
+                Termos de Uso
+              </Link>{" "}
+              e a{" "}
+              <Link to="/privacidade" target="_blank" className="font-medium text-teal hover:underline">
+                Política de Privacidade
+              </Link>
+              .
+            </span>
+          </label>
 
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "Criando conta..." : "Criar conta"}

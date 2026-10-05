@@ -32,6 +32,23 @@ export function logoutCustomer(slug: string): Promise<void> {
   return api<void>(`/establishments/${slug}/customers/logout`, { method: "POST" });
 }
 
+export function forgotPasswordCustomer(slug: string, email: string): Promise<{ message: string }> {
+  return api(`/establishments/${slug}/customers/forgot-password`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPasswordCustomer(
+  slug: string,
+  data: { token: string; password: string; confirmPassword: string }
+): Promise<{ message: string }> {
+  return api(`/establishments/${slug}/customers/reset-password`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export type CustomerAppointmentStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
 
 export interface CustomerAppointment {

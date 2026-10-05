@@ -106,3 +106,39 @@ export async function sendAppointmentEmails(data: AppointmentEmailData): Promise
     if (r.status === "rejected") console.error("[email] falha ao enviar:", r.reason);
   }
 }
+
+/**
+ * Avisa o cliente que o estabelecimento cancelou o agendamento. Chamado
+ * depois que o cancelamento já foi salvo — falha de envio não deve reverter
+ * nem bloquear a resposta ao admin (mesma convenção de sendAppointmentEmails).
+ */
+export async function sendCancellationEmail(data: {
+  to: string;
+  establishmentName: string;
+  establishmentPhone: string | null;
+  serviceName: string;
+  startsAt: Date;
+}): Promise<void> {
+  const when = dateTimeFmt.format(data.startsAt);
+  await send(
+    data.to,
+    `Agendamento cancelado — ${data.establishmentName}`,
+    `<p>Seu agendamento em <strong>${escapeHtml(data.establishmentName)}</strong> foi cancelado:</p>
+     <ul>
+       <li><strong>Serviço:</strong> ${escapeHtml(data.serviceName)}</li>
+       <li><strong>Quando:</strong> ${when}</li>
+     </ul>
+     ${data.establishmentPhone ? `<p>Dúvidas? Fale com o estabelecimento: ${escapeHtml(data.establishmentPhone)}</p>` : ""}`
+  );
+}
+
+/** Link de "esqueci minha senha", usado tanto pelo admin quanto pelo cliente final. */
+export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
+  await send(
+    to,
+    "Redefinição de senha",
+    `<p>Recebemos um pedido para redefinir sua senha.</p>
+     <p><a href="${resetUrl}">Clique aqui para escolher uma nova senha</a>. O link expira em 1 hora.</p>
+     <p>Se você não pediu isso, ignore este e-mail — sua senha continua a mesma.</p>`
+  );
+}

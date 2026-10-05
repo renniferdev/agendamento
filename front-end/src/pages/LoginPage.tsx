@@ -55,15 +55,20 @@ export function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Field
-            label="Senha"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div>
+            <Field
+              label="Senha"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Link to="/esqueci-senha" className="mt-1.5 block text-right text-xs text-teal hover:underline">
+              Esqueceu a senha?
+            </Link>
+          </div>
 
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "Entrando..." : "Entrar"}

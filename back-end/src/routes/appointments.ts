@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { sendCancellationEmail } from "../lib/email";
 
 export const appointmentsRouter = Router();
 
@@ -54,6 +55,11 @@ appointmentsRouter.patch("/:id/cancel", async (req, res, next) => {
     const { establishmentId } = req.adminUser!;
     const existing = await prisma.appointment.findFirst({
       where: { id: req.params.id, establishmentId },
+      include: {
+        customer: { select: { email: true } },
+        service: { select: { name: true } },
+        establishment: { select: { name: true, phone: true } },
+      },
     });
     if (!existing) {
       res.status(404).json({ error: "Agendamento não encontrado." });
@@ -68,6 +74,17 @@ appointmentsRouter.patch("/:id/cancel", async (req, res, next) => {
       data: { status: "CANCELLED" },
     });
     res.json(appointment);
+
+    // Depois da resposta: e-mail nunca atrasa nem derruba o cancelamento.
+    if (existing.customer.email) {
+      sendCancellationEmail({
+        to: existing.customer.email,
+        establishmentName: existing.establishment.name,
+        establishmentPhone: existing.establishment.phone,
+        serviceName: existing.service.name,
+        startsAt: existing.startsAt,
+      }).catch((err) => console.error("[email] falha ao enviar cancelamento:", err));
+    }
   } catch (err) {
     next(err);
   }

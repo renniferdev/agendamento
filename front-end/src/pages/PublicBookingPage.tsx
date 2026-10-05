@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { useParams } from "react-router-dom";
-import { Alert, Button, Field } from "../components/ui";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Alert, Button, Card, Field } from "../components/ui";
 import { api, ApiError, errorMessage } from "../lib/api";
 import { CustomerAuthProvider, useCustomerAuth } from "../context/CustomerAuthContext";
 import {
+  forgotPasswordCustomer,
   getCustomerAppointments,
+  resetPasswordCustomer,
   type CustomerAppointment,
   type CustomerAppointmentStatus,
 } from "../lib/customerAuth";
@@ -192,7 +194,7 @@ function BookingPageContent({ slug }: { slug: string }) {
 
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-6">
         {!customer ? (
-          <CustomerAuthGate brand={brand} />
+          <CustomerAuthGate brand={brand} slug={slug} />
         ) : (
           <CustomerBadge brand={brand} view={view} onChangeView={setView} />
         )}
@@ -320,23 +322,38 @@ function CustomerBadge({
   const { customer, logout } = useCustomerAuth();
   if (!customer) return null;
   return (
-    <div className="flex items-center justify-between gap-3 rounded border border-line bg-white px-4 py-2 text-sm">
-      <span className="text-ink-soft">
-        Olá, <strong className="text-ink">{customer.name}</strong>
-      </span>
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => onChangeView(view === "booking" ? "profile" : "booking")}
-          style={{ color: brand }}
-          className="font-medium underline"
-        >
-          {view === "booking" ? "Meus dados" : "Agendar"}
-        </button>
-        <button type="button" onClick={() => void logout()} className="font-medium text-muted underline">
-          Sair
-        </button>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-line bg-white px-4 py-3">
+      <div className="flex items-center gap-5">
+        <span className="text-sm text-ink-soft">
+          Olá, <strong className="text-ink">{customer.name}</strong>
+        </span>
+        <nav className="flex items-center gap-4">
+          {(
+            [
+              { key: "booking", label: "Agendar" },
+              { key: "profile", label: "Meus dados" },
+            ] as const
+          ).map((tab) => {
+            const active = view === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => onChangeView(tab.key)}
+                style={active ? { borderColor: brand } : undefined}
+                className={`border-b-2 pb-0.5 text-sm ${
+                  active ? "font-medium text-ink" : "border-transparent text-muted hover:text-ink-soft"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
       </div>
+      <Button variant="secondary" onClick={() => void logout()}>
+        Sair
+      </Button>
     </div>
   );
 }
@@ -463,30 +480,63 @@ function formatPhone(digits: string): string {
  * CustomerAuthContext), então este formulário chama sempre as rotas
  * `/establishments/:slug/customers/*`.
  */
-function CustomerAuthGate({ brand }: { brand: string }) {
+type AuthMode = "login" | "register" | "forgot" | "reset";
+
+function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
   const { login, register } = useCustomerAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const resetToken = searchParams.get("resetToken");
+
+  const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : "login");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function switchMode(next: AuthMode) {
+    setError(null);
+    setNotice(null);
+    setMode(next);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
+
     if (mode === "register" && password !== confirmPassword) {
       setError("As senhas não coincidem.");
       return;
     }
+    if (mode === "reset" && password !== confirmPassword) {
+      setError("As senhas não coincidem.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (mode === "login") {
         await login(email, password);
-      } else {
+      } else if (mode === "register") {
         await register({ name, phone, email, password, confirmPassword });
+      } else if (mode === "forgot") {
+        const { message } = await forgotPasswordCustomer(slug, email);
+        setNotice(message);
+      } else {
+        await resetPasswordCustomer(slug, { token: resetToken!, password, confirmPassword });
+        setNotice("Senha redefinida com sucesso. Entre com sua nova senha.");
+        setSearchParams((params) => {
+          params.delete("resetToken");
+          return params;
+        });
+        setPassword("");
+        setConfirmPassword("");
+        switchMode("login");
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -495,13 +545,18 @@ function CustomerAuthGate({ brand }: { brand: string }) {
     }
   }
 
+  const titles: Record<AuthMode, string> = {
+    login: "Entre para agendar",
+    register: "Crie sua conta para agendar",
+    forgot: "Esqueci minha senha",
+    reset: "Redefinir senha",
+  };
+
   return (
-    <section className="rounded border border-line bg-white p-4">
-      <h2 className="mb-3 font-display text-lg text-ink">
-        {mode === "login" ? "Entre para agendar" : "Crie sua conta para agendar"}
-      </h2>
-      <form onSubmit={handleSubmit} className="space-y-3">
+    <Card title={titles[mode]}>
+      <form onSubmit={handleSubmit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
+        {notice && <Alert kind="success">{notice}</Alert>}
 
         {mode === "register" && (
           <>
@@ -526,27 +581,33 @@ function CustomerAuthGate({ brand }: { brand: string }) {
             />
           </>
         )}
-        <Field
-          label="E-mail"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Field
-          label="Senha"
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-          hint={mode === "register" ? "Mínimo de 8 caracteres." : undefined}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        {mode === "register" && (
+
+        {(mode === "login" || mode === "register" || mode === "forgot") && (
+          <Field
+            label="E-mail"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        )}
+
+        {(mode === "login" || mode === "register" || mode === "reset") && (
+          <Field
+            label={mode === "reset" ? "Nova senha" : "Senha"}
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            hint={mode !== "login" ? "Mínimo de 8 caracteres." : undefined}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        )}
+        {(mode === "register" || mode === "reset") && (
           <Field
             label="Confirmar senha"
             name="confirmPassword"
@@ -559,31 +620,77 @@ function CustomerAuthGate({ brand }: { brand: string }) {
           />
         )}
 
-        <button
+        {mode === "login" && (
+          <button
+            type="button"
+            className="-mt-2 block text-right text-xs text-teal hover:underline"
+            onClick={() => switchMode("forgot")}
+          >
+            Esqueceu a senha?
+          </button>
+        )}
+
+        {mode === "register" && (
+          <label className="flex items-start gap-2 text-sm text-ink-soft">
+            <input
+              type="checkbox"
+              required
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-line accent-teal"
+            />
+            <span>
+              Li e concordo com os{" "}
+              <Link to="/termos" target="_blank" className="font-medium text-teal hover:underline">
+                Termos de Uso
+              </Link>{" "}
+              e a{" "}
+              <Link to="/privacidade" target="_blank" className="font-medium text-teal hover:underline">
+                Política de Privacidade
+              </Link>
+              .
+            </span>
+          </label>
+        )}
+
+        <Button
           type="submit"
           disabled={submitting}
           style={{ backgroundColor: brand }}
-          className="w-full rounded px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full hover:opacity-90"
         >
-          {submitting ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}
-        </button>
+          {submitting
+            ? "Aguarde..."
+            : mode === "login"
+              ? "Entrar"
+              : mode === "register"
+                ? "Criar conta"
+                : mode === "forgot"
+                  ? "Enviar link de redefinição"
+                  : "Salvar nova senha"}
+        </Button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-ink-soft">
-        {mode === "login" ? "Ainda não tem conta aqui?" : "Já tem conta aqui?"}{" "}
-        <Button
-          type="button"
-          variant="secondary"
-          className="ml-1 px-2! py-1!"
-          onClick={() => {
-            setError(null);
-            setMode(mode === "login" ? "register" : "login");
-          }}
-        >
-          {mode === "login" ? "Cadastre-se" : "Entrar"}
-        </Button>
-      </p>
-    </section>
+      {(mode === "login" || mode === "register") && (
+        <p className="mt-6 text-center text-sm text-ink-soft">
+          {mode === "login" ? "Ainda não tem conta aqui?" : "Já tem conta aqui?"}{" "}
+          <button
+            type="button"
+            className="font-medium text-teal hover:underline"
+            onClick={() => switchMode(mode === "login" ? "register" : "login")}
+          >
+            {mode === "login" ? "Cadastre-se" : "Entrar"}
+          </button>
+        </p>
+      )}
+      {mode === "forgot" && (
+        <p className="mt-6 text-center text-sm text-ink-soft">
+          <button type="button" className="font-medium text-teal hover:underline" onClick={() => switchMode("login")}>
+            Voltar para o login
+          </button>
+        </p>
+      )}
+    </Card>
   );
 }
 

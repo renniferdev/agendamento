@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { authLimiter } from "../middleware/rateLimit";
 
 export const registerRouter = Router();
 
@@ -20,7 +21,7 @@ const registerSchema = z.object({
  * seguida é feito pelo front via `/auth/callback/credentials`, como qualquer
  * outro login. Quem entrou com Google já é criado pelo adapter do Auth.js.
  */
-registerRouter.post("/register", async (req, res, next) => {
+registerRouter.post("/register", authLimiter, async (req, res, next) => {
   try {
     const { name, email, password } = registerSchema.parse(req.body);
 

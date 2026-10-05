@@ -4,6 +4,8 @@ import { AdminAppointmentsPage } from "./pages/AdminAppointmentsPage";
 import { AdminSchedulePage } from "./pages/AdminSchedulePage";
 import { AdminServicesPage } from "./pages/AdminServicesPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ForgotPasswordPage, ResetPasswordPage } from "./pages/PasswordResetPages";
+import { PrivacyPolicyPage, TermsOfServicePage } from "./pages/LegalPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PublicBookingPage } from "./pages/PublicBookingPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -16,7 +18,12 @@ export default function App() {
       <Route element={<PublicOnly />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/registro" element={<RegisterPage />} />
+        <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
+        <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
       </Route>
+
+      <Route path="/privacidade" element={<PrivacyPolicyPage />} />
+      <Route path="/termos" element={<TermsOfServicePage />} />
 
       <Route element={<RequireNotOnboarded />}>
         <Route path="/onboarding" element={<OnboardingPage />} />
