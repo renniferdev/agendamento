@@ -1,0 +1,22 @@
+# Postgres descartável para os testes de integração e de carga.
+# Nunca aponta para o banco real: porta 5433, banco `agendamento_test`.
+#
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down      # remove tudo
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agendamento_test
+    ports:
+      - "5433:5432"
+    # Dados em memória: rápido e sem lixo entre execuções.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agendamento_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
