@@ -20,8 +20,30 @@ import { prisma } from "./prisma";
 /** Origem do front-end, usada no CORS e nos redirects pós-login do Auth.js. */
 export const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:5173";
 
+const isProd = process.env.NODE_ENV === "production";
+
+/**
+ * Em produção front (Vercel) e API (Render) ficam em sites diferentes, então
+ * os cookies do Auth.js precisam de `SameSite=None; Secure` para ir nos fetches
+ * com credentials. Só sobrescrevemos as `options`; nome e demais atributos
+ * continuam os padrões do Auth.js (que faz o merge). Em dev (http, localhost)
+ * ficam os padrões.
+ */
+const crossSite = { sameSite: "none" as const, secure: true };
+const crossSiteCookies = isProd
+  ? {
+      sessionToken: { options: crossSite },
+      callbackUrl: { options: crossSite },
+      csrfToken: { options: crossSite },
+      pkceCodeVerifier: { options: crossSite },
+      state: { options: crossSite },
+      nonce: { options: crossSite },
+    }
+  : undefined;
+
 export const authConfig = {
   adapter: PrismaAdapter(prisma),
+  ...(crossSiteCookies ? { cookies: crossSiteCookies } : {}),
   session: { strategy: "jwt" as const },
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
