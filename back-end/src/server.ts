@@ -20,11 +20,11 @@ import { FRONTEND_URL } from "./lib/auth";
 
 const app = express();
 
-// Necessário para o Auth.js detectar corretamente protocolo/host atrás de
-// proxies (Vercel, etc.) ao gerar callback URLs. Também faz o
-// express-rate-limit usar o IP real do cliente (X-Forwarded-For) em vez do
-// IP do proxy.
-app.set("trust proxy", true);
+// Em produção a requisição passa por 2 proxies (rewrite da Vercel -> balanceador
+// do Render). Confiar em exatamente 2 saltos faz `req.ip` (rate limit) ser o IP
+// real do cliente. `true` seria inseguro (qualquer um forja X-Forwarded-For) e o
+// express-rate-limit recusa esse valor.
+app.set("trust proxy", process.env.NODE_ENV === "production" ? 2 : false);
 
 // Cabeçalhos de segurança padrão (X-Content-Type-Options, HSTS, etc.). API
 // pura (sem HTML próprio), então o CSP default do helmet não afeta nada aqui.
@@ -39,30 +39,38 @@ app.use(express.json());
 // (o Auth.js lê os próprios cookies direto do header, sem depender disso).
 app.use(cookieParser());
 
+// Todas as rotas ficam num router montado em `/api` (usado em produção: a Vercel
+// repassa /api/* para cá, deixando front e API na mesma origem e os cookies de
+// sessão de primeira parte) e também na raiz (dev local, VITE_API_URL sem /api).
+const api = express.Router();
+
 // Cadastro por e-mail/senha e reset de senha — precisam vir ANTES do Auth.js,
 // que captura /auth/*.
-app.use("/auth", registerRouter);
-app.use("/auth", passwordResetRouter);
+api.use("/auth", registerRouter);
+api.use("/auth", passwordResetRouter);
 
 // Login por credenciais (Auth.js) também é alvo de força bruta.
-app.use("/auth/callback/credentials", authLimiter);
+api.use("/auth/callback/credentials", authLimiter);
 
 // Auth.js — expõe /auth/signin, /auth/callback/:provider, /auth/session, etc.
-app.use("/auth/*", ExpressAuth(authConfig));
+api.use("/auth/*", ExpressAuth(authConfig));
 
 // Rotas públicas consumidas pela página de agendamento do cliente final.
-app.use("/establishments", availabilityRouter);
-app.use("/establishments", customerAuthRouter);
-app.use("/establishments", publicEstablishmentsRouter);
+api.use("/establishments", availabilityRouter);
+api.use("/establishments", customerAuthRouter);
+api.use("/establishments", publicEstablishmentsRouter);
 
 // Onboarding: exige login, mas NÃO exige estabelecimento (é aqui que ele é criado).
-app.use("/onboarding", onboardingRouter);
+api.use("/onboarding", onboardingRouter);
 
 // Rotas do painel administrativo (protegidas por requireAdmin no router).
-app.use("/admin/services", servicesRouter);
-app.use("/admin/business-hours", businessHoursRouter);
-app.use("/admin/blocked-slots", blockedSlotsRouter);
-app.use("/admin/appointments", appointmentsRouter);
+api.use("/admin/services", servicesRouter);
+api.use("/admin/business-hours", businessHoursRouter);
+api.use("/admin/blocked-slots", blockedSlotsRouter);
+api.use("/admin/appointments", appointmentsRouter);
+
+app.use("/api", api);
+app.use("/", api);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
