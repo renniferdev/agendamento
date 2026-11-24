@@ -75,7 +75,11 @@ A API sobe por padrão em `http://localhost:3333` (conforme `NEXTAUTH_URL`/confi
 npm run build           # compila TypeScript para dist/
 npm run start            # roda a versão compilada (dist/server.js)
 npm run prisma:studio    # abre o Prisma Studio (GUI do banco)
+npm test                 # testes unitários
+npm run test:integration # testes de integração (precisa do Postgres de teste)
 ```
+
+Guia dos testes de integração e de carga: [docs/TESTES.md](docs/TESTES.md).
 
 ## 2. Configurar o front-end
 
