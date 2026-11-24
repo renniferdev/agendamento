@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  back-end:
+    name: Back-end (build + testes)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: back-end
+
+    # Postgres descartável, só para os testes de integração.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agendamento_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agendamento_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: back-end/.nvmrc
+          cache: npm
+          cache-dependency-path: back-end/package-lock.json
+
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Build
+        run: npm run build
+      - name: Checagem de tipos dos testes
+        run: npm run typecheck:tests
+      - name: Testes unitários
+        run: npm test
+      - name: Testes de integração
+        run: npm run test:integration
+
+  front-end:
+    name: Front-end (tipos + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front-end
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: front-end/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_URL: /api
