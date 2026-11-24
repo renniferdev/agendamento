@@ -3,3 +3,6 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Gerado por scripts/load/seed.ts (cookies de teste)
+scripts/load/tokens.json
