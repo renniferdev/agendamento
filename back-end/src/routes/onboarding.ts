@@ -13,7 +13,7 @@ onboardingRouter.use(requireAuth);
 // URL pública /:slug no front-end.
 const RESERVED_SLUGS = new Set([
   "admin", "auth", "api", "onboarding", "login", "logout", "signup",
-  "health", "establishments", "static", "assets",
+  "health", "establishments", "static", "assets", "plataforma", "platform",
 ]);
 
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -43,6 +43,14 @@ const establishmentInputSchema = z.object({
 onboardingRouter.post("/establishment", async (req, res, next) => {
   try {
     const user = req.authUser!;
+
+    if (user.status === "BLOCKED") {
+      res.status(403).json({
+        error: "Sua conta está bloqueada. Entre em contato com o suporte.",
+        code: "ACCOUNT_BLOCKED",
+      });
+      return;
+    }
 
     if (user.establishmentId) {
       res.status(409).json({
@@ -118,6 +126,8 @@ onboardingRouter.get("/status", async (req, res, next) => {
       onboarded: user.establishmentId !== null,
       establishmentId: user.establishmentId,
       role: user.role,
+      accountStatus: user.status,
+      isPlatformAdmin: user.isPlatformAdmin,
       establishment,
     });
   } catch (err) {

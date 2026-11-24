@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { PublicOnly, RequireNotOnboarded, RequireOnboarded } from "./components/guards";
+import { PublicOnly, RequireNotOnboarded, RequireOnboarded, RequirePlatformAdmin } from "./components/guards";
+import { PlatformPage } from "./pages/PlatformPage";
 import { AdminAppointmentsPage } from "./pages/AdminAppointmentsPage";
 import { AdminSchedulePage } from "./pages/AdminSchedulePage";
 import { AdminServicesPage } from "./pages/AdminServicesPage";
@@ -24,6 +25,10 @@ export default function App() {
 
       <Route path="/privacidade" element={<PrivacyPolicyPage />} />
       <Route path="/termos" element={<TermsOfServicePage />} />
+
+      <Route element={<RequirePlatformAdmin />}>
+        <Route path="/plataforma" element={<PlatformPage />} />
+      </Route>
 
       <Route element={<RequireNotOnboarded />}>
         <Route path="/onboarding" element={<OnboardingPage />} />

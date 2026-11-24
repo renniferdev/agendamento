@@ -55,6 +55,14 @@ enum Role {
   STAFF
 }
 
+// Liberação da conta pelo dono da plataforma. Contas novas nascem PENDING e só
+// usam o painel depois de ACTIVE; BLOCKED derruba o acesso (ex: falta de pagamento).
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  BLOCKED
+}
+
 model User {
   id              String    @id @default(cuid())
   establishmentId String?   @map("establishment_id")
@@ -64,6 +72,7 @@ model User {
   image           String?
   passwordHash    String?   @map("password_hash") // null para quem só usa login Google
   role            Role      @default(ADMIN)
+  status          AccountStatus @default(PENDING)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 

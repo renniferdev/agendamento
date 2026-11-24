@@ -15,6 +15,8 @@ import { blockedSlotsRouter } from "./routes/blockedSlots";
 import { publicEstablishmentsRouter } from "./routes/publicEstablishments";
 import { customerAuthRouter } from "./routes/customerAuth";
 import { appointmentsRouter } from "./routes/appointments";
+import { platformRouter } from "./routes/platform";
+import { requireActiveEstablishment } from "./middleware/requireActiveEstablishment";
 import { authLimiter } from "./middleware/rateLimit";
 import { FRONTEND_URL } from "./lib/auth";
 
@@ -70,9 +72,14 @@ api.use(
 );
 
 // Rotas públicas consumidas pela página de agendamento do cliente final.
+// A página só fica no ar enquanto o dono estiver liberado (ACTIVE).
+api.use("/establishments/:slug", requireActiveEstablishment);
 api.use("/establishments", availabilityRouter);
 api.use("/establishments", customerAuthRouter);
 api.use("/establishments", publicEstablishmentsRouter);
+
+// Área do dono da plataforma (só PLATFORM_ADMIN_EMAIL via Google).
+api.use("/platform", platformRouter);
 
 // Onboarding: exige login, mas NÃO exige estabelecimento (é aqui que ele é criado).
 api.use("/onboarding", onboardingRouter);

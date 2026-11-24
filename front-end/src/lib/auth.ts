@@ -11,6 +11,9 @@ export interface OnboardingStatus {
   onboarded: boolean;
   establishmentId: string | null;
   role: "ADMIN" | "STAFF";
+  accountStatus: "PENDING" | "ACTIVE" | "BLOCKED";
+  /** Dono da plataforma (acessa /plataforma). */
+  isPlatformAdmin: boolean;
   establishment: { name: string; slug: string } | null;
 }
 

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { getSession } from "@auth/express";
-import type { Role } from "@prisma/client";
+import type { AccountStatus, Role } from "@prisma/client";
 import { authConfig } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
@@ -8,6 +8,13 @@ export interface AuthUser {
   id: string;
   email: string;
   role: Role;
+  /** Liberação da conta pelo dono da plataforma (PENDING até ele aprovar). */
+  status: AccountStatus;
+  /**
+   * Dono da plataforma: e-mail igual a PLATFORM_ADMIN_EMAIL E identidade Google
+   * vinculada (e-mail verificado pelo Google, não só digitado num cadastro).
+   */
+  isPlatformAdmin: boolean;
   /** null enquanto o usuário ainda não completou o onboarding. */
   establishmentId: string | null;
 }
@@ -52,7 +59,14 @@ export const requireAuth: RequestHandler = async (
 
     const user = await prisma.user.findUnique({
       where: { id: sessionUserId },
-      select: { id: true, email: true, role: true, establishmentId: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        establishmentId: true,
+        accounts: { where: { provider: "google" }, select: { id: true }, take: 1 },
+      },
     });
 
     if (!user) {
@@ -61,7 +75,18 @@ export const requireAuth: RequestHandler = async (
       return;
     }
 
-    req.authUser = user;
+    const platformEmail = process.env.PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
+    const isPlatformAdmin =
+      !!platformEmail && user.email.toLowerCase() === platformEmail && user.accounts.length > 0;
+
+    req.authUser = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      establishmentId: user.establishmentId,
+      isPlatformAdmin,
+    };
     next();
   } catch (err) {
     next(err);
@@ -82,6 +107,21 @@ export const requireAdmin: RequestHandler = (req, res, next) => {
 
     const user = req.authUser!;
 
+    if (user.status === "BLOCKED") {
+      res.status(403).json({
+        error: "Sua conta está bloqueada. Entre em contato com o suporte.",
+        code: "ACCOUNT_BLOCKED",
+      });
+      return;
+    }
+    if (user.status !== "ACTIVE") {
+      res.status(403).json({
+        error: "Sua conta ainda está aguardando liberação.",
+        code: "ACCOUNT_PENDING",
+      });
+      return;
+    }
+
     if (!user.establishmentId) {
       res.status(403).json({
         error: "Complete o cadastro do seu estabelecimento antes de acessar o painel.",
@@ -91,6 +131,21 @@ export const requireAdmin: RequestHandler = (req, res, next) => {
     }
 
     req.adminUser = { ...user, establishmentId: user.establishmentId };
+    next();
+  });
+};
+
+/**
+ * Exige o dono da plataforma. Só existe UM: o e-mail de PLATFORM_ADMIN_EMAIL
+ * logado via Google. Sem a variável definida, ninguém acessa.
+ */
+export const requirePlatformAdmin: RequestHandler = (req, res, next) => {
+  requireAuth(req, res, (err?: unknown) => {
+    if (err) return next(err);
+    if (!req.authUser!.isPlatformAdmin) {
+      res.status(403).json({ error: "Acesso negado.", code: "FORBIDDEN" });
+      return;
+    }
     next();
   });
 };
