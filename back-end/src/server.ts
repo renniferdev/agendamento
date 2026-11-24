@@ -53,7 +53,21 @@ api.use("/auth", passwordResetRouter);
 api.use("/auth/callback/credentials", authLimiter);
 
 // Auth.js — expõe /auth/signin, /auth/callback/:provider, /auth/session, etc.
-api.use("/auth/*", ExpressAuth(authConfig));
+// O @auth/express monta a URL pública (callback do Google, cookies) a partir do
+// cabeçalho Host. Atrás do rewrite da Vercel o Host chega como o do Render, então
+// em produção forçamos o host público de NEXTAUTH_URL (o domínio do front).
+const publicHost =
+  process.env.NODE_ENV === "production" && process.env.NEXTAUTH_URL
+    ? new URL(process.env.NEXTAUTH_URL).host
+    : null;
+api.use(
+  "/auth/*",
+  (req, _res, next) => {
+    if (publicHost) req.headers.host = publicHost;
+    next();
+  },
+  ExpressAuth(authConfig),
+);
 
 // Rotas públicas consumidas pela página de agendamento do cliente final.
 api.use("/establishments", availabilityRouter);
