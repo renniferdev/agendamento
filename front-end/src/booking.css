@@ -1,0 +1,42 @@
+/**
+ * Tema da página pública de agendamento. Tudo é escopado em `.booking`, então
+ * o painel administrativo não é afetado. As cores de destaque vêm de cada
+ * estabelecimento (ver lib/brandTheme.ts).
+ */
+.booking {
+  --color-paper: #f3f5f8;
+  --color-paper-dim: #e9ecf2;
+  --color-ink: #16202f;
+  --color-ink-soft: #3a4658;
+  --color-muted: #5b6678;
+  --color-line: #dbe0e9;
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-sans);
+
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* 16px evita o zoom automático do iOS ao focar um campo. */
+.booking input:not([type="checkbox"]) {
+  min-height: 2.875rem;
+  border-radius: 0.625rem;
+  font-size: 1rem;
+}
+
+.booking .rounded {
+  border-radius: 0.625rem;
+}
+
+.booking button:not(:disabled) {
+  cursor: pointer;
+}
+
+.booking :is(button, a, input):focus-visible {
+  outline: 2px solid var(--brand-ink, #16202f);
+  outline-offset: 2px;
+}
+

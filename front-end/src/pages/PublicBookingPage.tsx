@@ -1,7 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { DateBlock } from "../components/booking/DateBlock";
+import { DayPicker } from "../components/booking/DayPicker";
+import { fullDayFmt, timeFmt, toDateValue } from "../components/booking/dates";
+import { SlotPicker, type Slot } from "../components/booking/SlotPicker";
 import { Alert, Button, Card, Field } from "../components/ui";
 import { api, ApiError, errorMessage } from "../lib/api";
+import { brandTheme } from "../lib/brandTheme";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { CustomerAuthProvider, useCustomerAuth } from "../context/CustomerAuthContext";
 import {
@@ -30,11 +35,6 @@ interface Establishment {
   googleClientId: string | null;
 }
 
-interface Slot {
-  start: string;
-  end: string;
-}
-
 interface CreatedAppointment {
   id: string;
   startsAt: string;
@@ -45,21 +45,6 @@ interface CreatedAppointment {
 }
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const timeFmt = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
-const longDateFmt = new Intl.DateTimeFormat("pt-BR", {
-  weekday: "long",
-  day: "2-digit",
-  month: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function todayInputValue(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 export function PublicBookingPage() {
   const { slug = "" } = useParams();
   // `key={slug}` reseta a sessão de cliente ao trocar de barbearia na URL.
@@ -76,7 +61,7 @@ function BookingPageContent({ slug }: { slug: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [service, setService] = useState<Service | null>(null);
-  const [date, setDate] = useState(todayInputValue);
+  const [date, setDate] = useState(() => toDateValue(new Date()));
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [slot, setSlot] = useState<Slot | null>(null);
 
@@ -175,166 +160,204 @@ function BookingPageContent({ slug }: { slug: string }) {
     return <Shell>Carregando...</Shell>;
   }
 
-  const brand = establishment.primaryColor;
+  const theme = brandTheme(establishment.primaryColor);
+  const initials = establishment.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase())
+    .join("");
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header style={{ backgroundColor: brand }} className="text-white">
-        <div className="mx-auto flex max-w-2xl items-center gap-4 px-4 py-7">
-          {establishment.logoUrl && (
-            <img
-              src={establishment.logoUrl}
-              alt=""
-              className="h-14 w-14 rounded-full bg-white object-cover p-1"
-            />
+    <div className="booking flex flex-col" style={theme}>
+      <header className="bg-(--brand) text-(--on-brand)">
+        <div className="mx-auto flex max-w-2xl items-center gap-4 px-4 py-6">
+          {establishment.logoUrl ? (
+            <img src={establishment.logoUrl} alt="" className="h-16 w-16 rounded-2xl bg-white object-cover" />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white text-xl font-bold text-(--brand-ink)"
+            >
+              {initials}
+            </div>
           )}
-          <div>
-            <h1 className="font-display text-2xl">{establishment.name}</h1>
-            <p className="text-sm opacity-80">Agende seu horário online</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl leading-tight font-extrabold break-words">{establishment.name}</h1>
+            <p className="text-sm">Agendamento online</p>
+            {establishment.phone && (
+              <a
+                href={`tel:${establishment.phone.replace(/[^\d+]/g, "")}`}
+                className="text-sm font-medium underline underline-offset-2"
+              >
+                {formatPhone(establishment.phone)}
+              </a>
+            )}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-        {!customer ? (
-          <CustomerAuthGate brand={brand} slug={slug} googleClientId={establishment.googleClientId} />
-        ) : (
-          <CustomerBadge brand={brand} view={view} onChangeView={setView} />
+      {customer && <CustomerNav view={view} onChangeView={setView} />}
+
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
+        {!customer && (
+          <div className="flex flex-col items-center gap-6">
+            <CustomerAuthGate slug={slug} googleClientId={establishment.googleClientId} />
+            {establishment.services.length > 0 && (
+              <section className="w-full max-w-md" aria-labelledby="services-preview">
+                <h2 id="services-preview" className="mb-2 text-lg font-bold">
+                  Serviços
+                </h2>
+                <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
+                  {establishment.services.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold">{s.name}</p>
+                        <p className="text-sm text-muted">{s.durationMinutes} min</p>
+                      </div>
+                      <p className="font-bold">{brl.format(s.priceCents / 100)}</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
         )}
 
-        {customer && view === "profile" && <CustomerProfile brand={brand} />}
+        {customer && view === "profile" && <CustomerProfile />}
 
         {customer &&
           view === "booking" &&
           (created ? (
-            <Confirmation appointment={created} brand={brand} onReset={reset} />
+            <Confirmation appointment={created} onReset={reset} />
           ) : (
-            <>
-              <Step number={1} title="Escolha o serviço" brand={brand} done={!!service}>
+            <div className="space-y-7">
+              <section aria-labelledby="step-service">
+                <h2 id="step-service" className="mb-3 text-xl font-bold">
+                  O que você quer agendar?
+                </h2>
                 {establishment.services.length === 0 ? (
                   <p className="text-sm text-muted">Este estabelecimento ainda não cadastrou serviços.</p>
                 ) : (
-                  <ul className="grid gap-2 sm:grid-cols-2">
+                  <ul className="space-y-2">
                     {establishment.services.map((s) => {
                       const selected = service?.id === s.id;
                       return (
                         <li key={s.id}>
                           <button
                             type="button"
+                            aria-pressed={selected}
                             onClick={() => setService(s)}
-                            style={selected ? { borderColor: brand, boxShadow: `0 0 0 1px ${brand}` } : undefined}
-                            className="w-full rounded border border-line bg-white p-3 text-left hover:border-ink-soft/40"
+                            className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left ${
+                              selected
+                                ? "border-(--brand-ink) bg-(--brand-soft) ring-1 ring-(--brand-ink)"
+                                : "border-line bg-white hover:border-(--brand-ink)"
+                            }`}
                           >
-                            <div className="font-medium text-ink">{s.name}</div>
-                            <div className="font-mono text-sm text-muted">
-                              {s.durationMinutes} min · {brl.format(s.priceCents / 100)}
-                            </div>
+                            <span
+                              aria-hidden="true"
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
+                                selected ? "border-(--brand) bg-(--brand) text-(--on-brand)" : "border-line"
+                              }`}
+                            >
+                              {selected && "✓"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-semibold">{s.name}</span>
+                              <span className="block text-sm text-muted">{s.durationMinutes} min</span>
+                            </span>
+                            <span className="font-bold">{brl.format(s.priceCents / 100)}</span>
                           </button>
                         </li>
                       );
                     })}
                   </ul>
                 )}
-              </Step>
+              </section>
 
               {service && (
-                <Step number={2} title="Escolha a data e o horário" brand={brand} done={!!slot}>
-                  <div className="max-w-xs">
-                    <Field
-                      label="Data"
-                      name="date"
-                      type="date"
-                      min={todayInputValue()}
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="mt-3">
-                    {slots === null ? (
-                      <p className="text-sm text-muted">Buscando horários...</p>
-                    ) : slots.length === 0 ? (
-                      <p className="text-sm text-muted">Nenhum horário disponível nesse dia. Tente outra data.</p>
-                    ) : (
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                        {slots.map((s) => {
-                          const selected = slot?.start === s.start;
-                          return (
-                            <button
-                              key={s.start}
-                              type="button"
-                              onClick={() => setSlot(s)}
-                              style={selected ? { backgroundColor: brand, borderColor: brand, color: "#fff" } : undefined}
-                              className="rounded border border-line bg-white px-2 py-2 font-mono text-sm font-medium text-ink hover:border-ink-soft/40"
-                            >
-                              {timeFmt.format(new Date(s.start))}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </Step>
+                <section aria-labelledby="step-when" className="space-y-5">
+                  <h2 id="step-when" className="text-xl font-bold">
+                    Quando?
+                  </h2>
+                  <DayPicker value={date} onChange={setDate} />
+                  <SlotPicker slots={slots} selected={slot} onSelect={setSlot} />
+                </section>
               )}
-
-              {service && slot && (
-                <Step number={3} title="Confirmar" brand={brand} done={false}>
-                  <form onSubmit={handleSubmit} className="space-y-3">
-                    <p className="rounded border border-line bg-paper-dim p-3 text-sm text-ink-soft">
-                      <strong className="text-ink">{service.name}</strong> ·{" "}
-                      <span className="font-mono">{longDateFmt.format(new Date(slot.start))}</span> ·{" "}
-                      <span className="font-mono">{brl.format(service.priceCents / 100)}</span>
-                    </p>
-                    {submitError && <Alert>{submitError}</Alert>}
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      style={{ backgroundColor: brand }}
-                      className="w-full rounded px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {submitting ? "Confirmando..." : "Confirmar agendamento"}
-                    </button>
-                  </form>
-                </Step>
-              )}
-
-              {submitError && !slot && service && <Alert>{submitError}</Alert>}
-            </>
+            </div>
           ))}
       </main>
+
+      {/* Resumo fixo no rodapé: o agendamento vai se montando até a confirmação. */}
+      {customer && view === "booking" && !created && service && (
+        <form
+          onSubmit={handleSubmit}
+          className="sticky bottom-0 border-t border-line bg-white shadow-[0_-8px_24px_-16px_rgba(22,32,47,0.35)]"
+        >
+          <div className="mx-auto max-w-2xl space-y-3 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            {submitError && <Alert>{submitError}</Alert>}
+            <div className="flex items-start justify-between gap-4" aria-live="polite">
+              <div className="min-w-0">
+                <p className="font-bold">{service.name}</p>
+                <p className="text-sm text-muted">
+                  {slot
+                    ? `${fullDayFmt.format(new Date(slot.start))}, às ${timeFmt.format(new Date(slot.start))}`
+                    : "Escolha o dia e o horário"}
+                </p>
+              </div>
+              <p className="text-lg font-bold">{brl.format(service.priceCents / 100)}</p>
+            </div>
+            <button
+              type="submit"
+              disabled={!slot || submitting}
+              className="min-h-12 w-full rounded-xl bg-(--brand) text-base font-bold text-(--on-brand) disabled:cursor-not-allowed disabled:bg-paper-dim disabled:text-muted"
+            >
+              {submitting ? "Confirmando..." : "Confirmar agendamento"}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper p-4 text-center text-muted">
-      <div className="w-full max-w-md rounded border border-line bg-white p-6">{children}</div>
+    <div className="booking flex items-center justify-center p-4 text-center text-muted">
+      <div className="w-full max-w-md rounded-2xl border border-line bg-white p-6">{children}</div>
     </div>
   );
 }
 
-function CustomerBadge({
-  brand,
+function CustomerNav({
   view,
   onChangeView,
 }: {
-  brand: string;
   view: "booking" | "profile";
   onChangeView: (v: "booking" | "profile") => void;
 }) {
   const { customer, logout } = useCustomerAuth();
   if (!customer) return null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-line bg-white px-4 py-3">
-      <div className="flex items-center gap-5">
-        <span className="text-sm text-ink-soft">
-          Olá, <strong className="text-ink">{customer.name}</strong>
-        </span>
-        <nav className="flex items-center gap-4">
+    <div className="border-b border-line bg-white">
+      <div className="mx-auto max-w-2xl px-4">
+        <div className="flex items-center justify-between gap-3 pt-3">
+          <p className="min-w-0 truncate text-sm text-ink-soft">
+            Olá, <strong className="text-ink">{customer.name}</strong>
+          </p>
+          <button
+            type="button"
+            onClick={() => void logout()}
+            className="text-sm font-medium text-muted underline underline-offset-2 hover:text-ink"
+          >
+            Sair
+          </button>
+        </div>
+        <nav className="mt-1 flex gap-6">
           {(
             [
               { key: "booking", label: "Agendar" },
-              { key: "profile", label: "Meus dados" },
+              { key: "profile", label: "Meus horários" },
             ] as const
           ).map((tab) => {
             const active = view === tab.key;
@@ -342,10 +365,10 @@ function CustomerBadge({
               <button
                 key={tab.key}
                 type="button"
+                aria-current={active ? "page" : undefined}
                 onClick={() => onChangeView(tab.key)}
-                style={active ? { borderColor: brand } : undefined}
-                className={`border-b-2 pb-0.5 text-sm ${
-                  active ? "font-medium text-ink" : "border-transparent text-muted hover:text-ink-soft"
+                className={`border-b-[3px] py-2.5 text-sm font-semibold ${
+                  active ? "border-(--brand) text-ink" : "border-transparent text-muted hover:text-ink"
                 }`}
               >
                 {tab.label}
@@ -354,9 +377,6 @@ function CustomerBadge({
           })}
         </nav>
       </div>
-      <Button variant="secondary" onClick={() => void logout()}>
-        Sair
-      </Button>
     </div>
   );
 }
@@ -369,10 +389,10 @@ const STATUS_LABEL: Record<CustomerAppointmentStatus, string> = {
 };
 
 /**
- * "Meus dados": dados da conta do cliente + histórico de agendamentos
- * naquele estabelecimento (não é agregado entre barbearias diferentes).
+ * "Meus horários": agendamentos do cliente naquele estabelecimento (não é
+ * agregado entre lojas diferentes) e os dados da conta.
  */
-function CustomerProfile({ brand }: { brand: string }) {
+function CustomerProfile() {
   const { customer } = useCustomerAuth();
   const { slug = "" } = useParams();
   const [appointments, setAppointments] = useState<CustomerAppointment[] | null>(null);
@@ -403,66 +423,77 @@ function CustomerProfile({ brand }: { brand: string }) {
     .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
 
   return (
-    <div className="space-y-4">
-      <section className="rounded border border-line bg-white p-4">
-        <h2 className="mb-3 font-display text-lg text-ink">Meus dados</h2>
-        <dl className="space-y-1 text-sm">
-          <div className="flex justify-between border-b border-line/60 py-1.5">
-            <dt className="text-muted">Nome</dt>
-            <dd className="font-medium text-ink">{customer.name}</dd>
-          </div>
-          <div className="flex justify-between border-b border-line/60 py-1.5">
-            <dt className="text-muted">E-mail</dt>
-            <dd className="font-medium text-ink">{customer.email}</dd>
-          </div>
-          <div className="flex justify-between py-1.5">
-            <dt className="text-muted">Telefone</dt>
-            <dd className="font-mono font-medium text-ink">{formatPhone(customer.phone)}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section className="rounded border border-line bg-white p-4">
-        <h2 className="mb-3 font-display text-lg text-ink">Próximos agendamentos</h2>
+    <div className="space-y-7">
+      <section>
+        <h2 className="mb-3 text-xl font-bold">Próximos horários</h2>
         {error ? (
           <Alert>{error}</Alert>
         ) : appointments === null ? (
           <p className="text-sm text-muted">Carregando...</p>
         ) : upcoming.length === 0 ? (
-          <p className="text-sm text-muted">Você não tem agendamentos futuros.</p>
+          <p className="rounded-2xl border border-dashed border-line px-4 py-5 text-center text-sm text-muted">
+            Você não tem horários marcados. Toque em “Agendar” para marcar um.
+          </p>
         ) : (
           <ul className="space-y-2">
             {upcoming.map((a) => (
-              <AppointmentRow key={a.id} appointment={a} brand={brand} />
+              <AppointmentRow key={a.id} appointment={a} />
             ))}
           </ul>
         )}
       </section>
 
       {appointments !== null && past.length > 0 && (
-        <section className="rounded border border-line bg-white p-4">
-          <h2 className="mb-3 font-display text-lg text-ink">Histórico</h2>
+        <section>
+          <h2 className="mb-3 text-lg font-bold">Anteriores e cancelados</h2>
           <ul className="space-y-2">
             {past.map((a) => (
-              <AppointmentRow key={a.id} appointment={a} brand={brand} />
+              <AppointmentRow key={a.id} appointment={a} past />
             ))}
           </ul>
         </section>
       )}
+
+      <section>
+        <h2 className="mb-3 text-lg font-bold">Meus dados</h2>
+        <dl className="divide-y divide-line rounded-2xl border border-line bg-white px-4 text-sm">
+          {[
+            ["Nome", customer.name],
+            ["E-mail", customer.email],
+            ["Telefone", formatPhone(customer.phone)],
+          ].map(([label, value]) => (
+            <div key={label} className="flex justify-between gap-4 py-3">
+              <dt className="text-muted">{label}</dt>
+              <dd className="min-w-0 font-semibold break-all">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
     </div>
   );
 }
 
-function AppointmentRow({ appointment, brand }: { appointment: CustomerAppointment; brand: string }) {
+function AppointmentRow({ appointment, past = false }: { appointment: CustomerAppointment; past?: boolean }) {
+  const start = new Date(appointment.startsAt);
+  const cancelled = appointment.status === "CANCELLED";
   return (
-    <li className="flex items-center justify-between rounded border border-line/60 px-3 py-2 text-sm">
-      <div>
-        <div className="font-medium text-ink">{appointment.service.name}</div>
-        <div className="font-mono text-muted">{longDateFmt.format(new Date(appointment.startsAt))}</div>
+    <li className="flex items-center gap-3 rounded-2xl border border-line bg-white p-3">
+      <DateBlock date={start} muted={past} />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">{appointment.service.name}</p>
+        <p className="text-sm text-muted">
+          <span className="sr-only">{fullDayFmt.format(start)}, </span>
+          às {timeFmt.format(start)}
+        </p>
       </div>
       <span
-        style={{ color: appointment.status === "CANCELLED" ? undefined : brand }}
-        className={appointment.status === "CANCELLED" ? "text-xs font-semibold text-muted" : "text-xs font-semibold"}
+        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+          cancelled
+            ? "bg-danger-light text-danger"
+            : past
+              ? "bg-paper-dim text-muted"
+              : "bg-success-light text-success"
+        }`}
       >
         {STATUS_LABEL[appointment.status]}
       </span>
@@ -486,11 +517,9 @@ function formatPhone(digits: string): string {
 type AuthMode = "login" | "register" | "forgot" | "reset" | "google-phone";
 
 function CustomerAuthGate({
-  brand,
   slug,
   googleClientId,
 }: {
-  brand: string;
   slug: string;
   googleClientId: string | null;
 }) {
@@ -696,8 +725,8 @@ function CustomerAuthGate({
         <Button
           type="submit"
           disabled={submitting}
-          style={{ backgroundColor: brand }}
-          className="w-full hover:opacity-90"
+          style={{ backgroundColor: "var(--brand)", color: "var(--on-brand)" }}
+          className="min-h-12 w-full text-base hover:opacity-90"
         >
           {submitting
             ? "Aguarde..."
@@ -753,94 +782,52 @@ function CustomerAuthGate({
   );
 }
 
-function Step({
-  number,
-  title,
-  brand,
-  done,
-  children,
-}: {
-  number: number;
-  title: string;
-  brand: string;
-  done: boolean;
-  children: ReactNode;
-}) {
+function Confirmation({ appointment, onReset }: { appointment: CreatedAppointment; onReset: () => void }) {
+  const start = new Date(appointment.startsAt);
+  const phone = appointment.establishment.phone;
   return (
-    <section className="rounded border border-line bg-white p-4">
-      <h2 className="mb-3 flex items-center gap-2.5 font-display text-lg text-ink">
-        <span
-          style={{ backgroundColor: brand }}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-sm font-mono text-xs font-semibold text-white"
-        >
-          {done ? "✓" : number}
-        </span>
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
+    <section className="rounded-2xl border border-line bg-white p-6" role="status">
+      <div
+        aria-hidden="true"
+        className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-(--brand) text-2xl font-bold text-(--on-brand)"
+      >
+        ✓
+      </div>
+      <h2 className="text-center text-2xl font-extrabold">Horário marcado</h2>
+      <p className="mt-1 text-center text-ink-soft">
+        {appointment.customer.name}, esperamos você em{" "}
+        <strong className="text-ink">{appointment.establishment.name}</strong>.
+      </p>
 
-/**
- * Renderizado como um talão de agendamento: canhoto perfurado (traço
- * pontilhado + recortes) separando o carimbo de confirmação dos dados do
- * horário, no lugar do card de sucesso genérico.
- */
-function Confirmation({
-  appointment,
-  brand,
-  onReset,
-}: {
-  appointment: CreatedAppointment;
-  brand: string;
-  onReset: () => void;
-}) {
-  return (
-    <section className="overflow-hidden rounded border border-line bg-white">
-      <div className="p-6 text-center">
-        <div
-          style={{ backgroundColor: brand }}
-          className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full text-xl text-white"
-        >
-          ✓
+      <div className="mt-6 flex items-center gap-4 rounded-2xl border border-line p-4">
+        <DateBlock date={start} />
+        <div className="min-w-0 flex-1">
+          <p className="text-3xl leading-tight font-extrabold">{timeFmt.format(start)}</p>
+          <p className="font-semibold">{appointment.service.name}</p>
+          <p className="text-sm text-muted">{fullDayFmt.format(start)}</p>
         </div>
-        <h2 className="font-display text-xl text-ink">Agendamento confirmado</h2>
-        <p className="mt-2 text-ink-soft">
-          {appointment.customer.name}, seu horário em <strong className="text-ink">{appointment.establishment.name}</strong>{" "}
-          está marcado.
-        </p>
       </div>
 
-      <div className="relative border-t border-dashed border-line">
-        <span className="absolute top-1/2 -left-3 h-6 w-6 -translate-y-1/2 rounded-full bg-paper" />
-        <span className="absolute top-1/2 -right-3 h-6 w-6 -translate-y-1/2 rounded-full bg-paper" />
+      <div className="mt-3 flex justify-between px-1 text-sm">
+        <span className="text-muted">Valor</span>
+        <span className="font-bold">{brl.format(appointment.service.priceCents / 100)}</span>
       </div>
 
-      <dl className="mx-auto max-w-sm space-y-1.5 p-6 text-sm">
-        <div className="flex justify-between">
-          <dt className="text-muted">Serviço</dt>
-          <dd className="font-medium text-ink">{appointment.service.name}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-muted">Quando</dt>
-          <dd className="font-mono font-medium text-ink">{longDateFmt.format(new Date(appointment.startsAt))}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-muted">Valor</dt>
-          <dd className="font-mono font-medium text-ink">{brl.format(appointment.service.priceCents / 100)}</dd>
-        </div>
-      </dl>
-      {appointment.establishment.phone && (
-        <p className="px-6 text-center text-sm text-muted">
-          Precisa remarcar? Fale com o estabelecimento: <span className="font-mono">{appointment.establishment.phone}</span>
+      {phone && (
+        <p className="mt-5 text-center text-sm text-muted">
+          Precisa remarcar? Ligue para{" "}
+          <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className="font-semibold text-(--brand-ink) underline">
+            {formatPhone(phone)}
+          </a>
         </p>
       )}
-      <div className="p-6 pt-4 text-center">
-        <button type="button" onClick={onReset} className="text-sm text-ink-soft underline">
-          Fazer outro agendamento
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onReset}
+        className="mt-5 min-h-12 w-full rounded-xl border border-line bg-white font-semibold hover:border-(--brand-ink)"
+      >
+        Marcar outro horário
+      </button>
     </section>
   );
 }
