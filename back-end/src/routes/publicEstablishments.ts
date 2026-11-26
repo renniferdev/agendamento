@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { getAvailableSlots, ServiceNotFoundError } from "../lib/availability";
-import { sendAppointmentEmails } from "../lib/email";
+import { ServiceNotFoundError } from "../lib/availability";
+import { createAppointment, notifyNewAppointment, SlotUnavailableError } from "../lib/booking";
 import { requireCustomer } from "../middleware/requireCustomer";
 
 /**
@@ -45,25 +45,11 @@ const bookingSchema = z.object({
   startsAt: z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), "Data/hora inválida"),
 });
 
-class SlotUnavailableError extends Error {
-  constructor() {
-    super("Este horário acabou de ficar indisponível. Escolha outro horário.");
-  }
-}
-
 /**
  * POST /establishments/:slug/appointments
  *
- * Cria um agendamento para o cliente final. O horário enviado pelo front é
- * revalidado no servidor com a MESMA regra da disponibilidade
- * (`getAvailableSlots`): tem que ser exatamente o início de um slot livre.
- *
- * Concorrência: a transação começa com `SELECT ... FOR UPDATE` na linha do
- * estabelecimento, o que serializa as reservas daquele tenant. Duas
- * requisições simultâneas para o mesmo horário entram em fila nesse lock;
- * a segunda só revalida depois que a primeira já gravou (commit), enxerga o
- * novo agendamento e recebe 409 SLOT_UNAVAILABLE. Reservas de
- * estabelecimentos diferentes não se bloqueiam.
+ * Cria um agendamento para o cliente final logado (regras e trava de
+ * concorrência em lib/booking.ts).
  */
 publicEstablishmentsRouter.post("/:slug/appointments", requireCustomer, async (req, res, next) => {
   try {
@@ -72,7 +58,7 @@ publicEstablishmentsRouter.post("/:slug/appointments", requireCustomer, async (r
 
     const establishment = await prisma.establishment.findUnique({
       where: { slug: req.params.slug },
-      select: { id: true, name: true, phone: true },
+      select: { id: true },
     });
     if (!establishment) {
       res.status(404).json({ error: "Estabelecimento não encontrado." });
@@ -81,36 +67,12 @@ publicEstablishmentsRouter.post("/:slug/appointments", requireCustomer, async (r
 
     const { customerId } = req.customer!;
 
-    const appointment = await prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT id FROM establishments WHERE id = ${establishment.id} FOR UPDATE`;
-
-        const slots = await getAvailableSlots({
-          establishmentId: establishment.id,
-          serviceId: data.serviceId,
-          date: startsAt,
-          db: tx,
-        });
-        const slot = slots.find((s) => s.start.getTime() === startsAt.getTime());
-        if (!slot) throw new SlotUnavailableError();
-
-        return tx.appointment.create({
-          data: {
-            establishmentId: establishment.id,
-            customerId,
-            serviceId: data.serviceId,
-            startsAt: slot.start,
-            endsAt: slot.end,
-            status: "CONFIRMED",
-          },
-          include: {
-            service: { select: { name: true, durationMinutes: true, priceCents: true } },
-            customer: { select: { name: true, phone: true, email: true } },
-          },
-        });
-      },
-      { timeout: 15000 }
-    );
+    const appointment = await createAppointment({
+      establishmentId: establishment.id,
+      serviceId: data.serviceId,
+      startsAt,
+      resolveCustomerId: async () => customerId,
+    });
 
     res.status(201).json({
       id: appointment.id,
@@ -119,20 +81,11 @@ publicEstablishmentsRouter.post("/:slug/appointments", requireCustomer, async (r
       endsAt: appointment.endsAt.toISOString(),
       service: appointment.service,
       customer: { name: appointment.customer.name, phone: appointment.customer.phone },
-      establishment: { name: establishment.name, phone: establishment.phone },
+      establishment: appointment.establishment,
     });
 
     // Depois da resposta: e-mails nunca atrasam nem derrubam a reserva.
-    void notify(establishment.id, {
-      establishmentName: establishment.name,
-      establishmentPhone: establishment.phone,
-      serviceName: appointment.service.name,
-      priceCents: appointment.service.priceCents,
-      startsAt: appointment.startsAt,
-      customerName: appointment.customer.name,
-      customerPhone: appointment.customer.phone,
-      customerEmail: appointment.customer.email,
-    });
+    void notifyNewAppointment(appointment, { notifyOwner: true });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: "Dados inválidos.", details: err.issues });
@@ -149,18 +102,3 @@ publicEstablishmentsRouter.post("/:slug/appointments", requireCustomer, async (r
     next(err);
   }
 });
-
-async function notify(
-  establishmentId: string,
-  data: Omit<Parameters<typeof sendAppointmentEmails>[0], "adminEmail">
-): Promise<void> {
-  try {
-    const admin = await prisma.user.findFirst({
-      where: { establishmentId, role: "ADMIN" },
-      select: { email: true },
-    });
-    await sendAppointmentEmails({ ...data, adminEmail: admin?.email ?? null });
-  } catch (err) {
-    console.error("[email] erro inesperado ao notificar:", err);
-  }
-}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AdminLayout } from "../components/AdminLayout";
-import { Alert, Field } from "../components/ui";
+import { NewAppointmentForm } from "../components/NewAppointmentForm";
+import { Alert, Button, Field } from "../components/ui";
 import { api, errorMessage } from "../lib/api";
 
 type Status = "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
@@ -42,6 +43,8 @@ export function AdminAppointmentsPage() {
   const [items, setItems] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,6 +77,28 @@ export function AdminAppointmentsPage() {
   return (
     <AdminLayout title="Agendamentos">
       {error && <Alert>{error}</Alert>}
+      {notice && <Alert kind="success">{notice}</Alert>}
+
+      {creating ? (
+        <NewAppointmentForm
+          onCancel={() => setCreating(false)}
+          onCreated={(message) => {
+            setCreating(false);
+            setNotice(message);
+            void load();
+          }}
+        />
+      ) : (
+        <Button
+          type="button"
+          onClick={() => {
+            setNotice(null);
+            setCreating(true);
+          }}
+        >
+          Novo agendamento
+        </Button>
+      )}
 
       <div className="max-w-xs">
         <Field label="A partir de" name="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />

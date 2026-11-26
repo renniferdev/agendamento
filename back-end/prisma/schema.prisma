@@ -172,9 +172,10 @@ model Customer {
   establishmentId String   @map("establishment_id")
   name            String
   phone           String   // só dígitos (normalizado na API); único por estabelecimento
-  email           String   // login do cliente; único por estabelecimento
+  email           String?  // login do cliente; único por estabelecimento. null: marcado pelo dono
   passwordHash    String?  @map("password_hash") // null para quem só usa login Google
   googleSub       String?  @map("google_sub") // identificador estável da conta Google
+  claimedAt       DateTime? @map("claimed_at") // quando um cadastro feito pelo dono virou conta
   createdAt       DateTime @default(now()) @map("created_at")
 
   establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)

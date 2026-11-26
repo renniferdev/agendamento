@@ -1,26 +1,18 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../lib/api";
+import { filterCustomers, formatPhone } from "../lib/customerSearch";
 import { Alert, Button, Field } from "./ui";
 
 interface Customer {
   id: string;
   name: string;
-  email: string;
+  /** null para quem foi marcado pelo dono sem informar e-mail. */
+  email: string | null;
   phone: string;
   createdAt: string;
 }
 
 const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" });
-
-function formatPhone(digits: string): string {
-  const d = digits.replace(/\D/g, "");
-  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-  return digits;
-}
-
-/** Busca sem diferenciar maiúsculas nem acentos ("jose" encontra "José"). */
-const normalize = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
 /**
  * Total, busca e lista de clientes. Usada pelo dono da loja (seus clientes) e
@@ -47,7 +39,7 @@ export function CustomerList({ endpoint }: { endpoint: string }) {
   }, [endpoint]);
 
   async function copyEmails(list: Customer[]) {
-    const emails = list.map((c) => c.email).join(", ");
+    const emails = list.flatMap((c) => c.email ?? []).join(", ");
     try {
       await navigator.clipboard.writeText(emails);
       setCopied(true);
@@ -63,14 +55,7 @@ export function CustomerList({ endpoint }: { endpoint: string }) {
     return <p className="text-sm text-muted">Nenhum cliente cadastrado ainda.</p>;
   }
 
-  const term = normalize(search.trim());
-  const digits = term.replace(/\D/g, "");
-  const visible = customers.filter(
-    (c) =>
-      !term ||
-      normalize(`${c.name} ${c.email}`).includes(term) ||
-      (digits.length > 0 && c.phone.includes(digits))
-  );
+  const visible = filterCustomers(customers, search);
 
   return (
     <div className="space-y-3">
@@ -79,7 +64,7 @@ export function CustomerList({ endpoint }: { endpoint: string }) {
           <strong className="text-2xl text-ink">{customers.length}</strong>{" "}
           {customers.length === 1 ? "cliente cadastrado" : "clientes cadastrados"}
         </p>
-        {visible.length > 0 && (
+        {visible.some((c) => c.email) && (
           <Button type="button" variant="secondary" onClick={() => void copyEmails(visible)}>
             {copied ? "E-mails copiados" : "Copiar e-mails"}
           </Button>
@@ -102,9 +87,13 @@ export function CustomerList({ endpoint }: { endpoint: string }) {
             <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2.5 text-sm">
               <div className="min-w-0">
                 <p className="font-medium text-ink">{c.name}</p>
-                <a href={`mailto:${c.email}`} className="break-all text-ink-soft hover:underline">
-                  {c.email}
-                </a>
+                {c.email ? (
+                  <a href={`mailto:${c.email}`} className="break-all text-ink-soft hover:underline">
+                    {c.email}
+                  </a>
+                ) : (
+                  <span className="text-muted">Sem e-mail</span>
+                )}
               </div>
               <div className="text-right">
                 <a href={`tel:${c.phone}`} className="font-medium text-ink-soft hover:underline">

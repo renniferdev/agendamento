@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { phoneSchema } from "../lib/phone";
 import { prisma } from "../lib/prisma";
 import {
   CUSTOMER_SESSION_COOKIE,
@@ -21,11 +22,6 @@ import { FRONTEND_URL } from "../lib/auth";
  */
 export const customerAuthRouter = Router();
 
-const phoneSchema = z
-  .string()
-  .transform((v) => v.replace(/\D/g, ""))
-  .refine((v) => v.length === 10 || v.length === 11, "Telefone deve ter DDD + número (10 ou 11 dígitos)");
-
 const registerSchema = z
   .object({
     name: z.string().trim().min(2, "Informe seu nome").max(120),
@@ -39,8 +35,25 @@ const registerSchema = z
     path: ["confirmPassword"],
   });
 
+const SESSION_FIELDS = { id: true, name: true, email: true, phone: true } as const;
+
 async function findEstablishmentBySlug(slug: string) {
   return prisma.establishment.findUnique({ where: { slug }, select: { id: true } });
+}
+
+/**
+ * Cadastro feito pelo dono (agendamento por telefone/balcão): ainda sem senha
+ * nem Google. Quando a pessoa cria a conta com o mesmo telefone, ela assume
+ * esse cadastro. Se o dono registrou um e-mail, ele também precisa conferir.
+ */
+async function findClaimableCustomer(establishmentId: string, phone: string, email: string) {
+  const customer = await prisma.customer.findUnique({
+    where: { establishmentId_phone: { establishmentId, phone } },
+    select: { id: true, email: true, passwordHash: true, googleSub: true },
+  });
+  if (!customer || customer.passwordHash || customer.googleSub) return null;
+  if (customer.email && customer.email !== email) return null;
+  return customer;
 }
 
 /** POST /establishments/:slug/customers/register */
@@ -54,16 +67,23 @@ customerAuthRouter.post("/:slug/customers/register", authLimiter, async (req, re
       return;
     }
 
-    const customer = await prisma.customer.create({
-      data: {
-        establishmentId: establishment.id,
-        name: data.name,
-        phone: data.phone,
-        email: data.email,
-        passwordHash: await bcrypt.hash(data.password, 10),
-      },
-      select: { id: true, name: true, email: true, phone: true },
-    });
+    const account = {
+      name: data.name,
+      email: data.email,
+      passwordHash: await bcrypt.hash(data.password, 10),
+    };
+    const walkIn = await findClaimableCustomer(establishment.id, data.phone, data.email);
+    const customer = walkIn
+      ? await prisma.customer.update({
+          where: { id: walkIn.id },
+          // Telefone não é verificado: o histórico anterior não é exposto (claimedAt).
+          data: { ...account, claimedAt: new Date() },
+          select: SESSION_FIELDS,
+        })
+      : await prisma.customer.create({
+          data: { ...account, establishmentId: establishment.id, phone: data.phone },
+          select: SESSION_FIELDS,
+        });
 
     const token = signCustomerJwt({ customerId: customer.id, establishmentId: establishment.id });
     res.cookie(CUSTOMER_SESSION_COOKIE, token, customerSessionCookieOptions());
@@ -125,8 +145,6 @@ const googleSchema = z.object({
   phone: phoneSchema.optional(),
 });
 
-const SESSION_FIELDS = { id: true, name: true, email: true, phone: true } as const;
-
 /**
  * POST /establishments/:slug/customers/google
  *
@@ -179,10 +197,18 @@ customerAuthRouter.post("/:slug/customers/google", authLimiter, async (req, res,
         res.json({ needsPhone: true, name: identity.name, email: identity.email });
         return;
       } else {
-        customer = await prisma.customer.create({
-          data: { establishmentId, name: identity.name, email: identity.email, phone, googleSub: identity.sub },
-          select: SESSION_FIELDS,
-        });
+        const walkIn = await findClaimableCustomer(establishmentId, phone, identity.email);
+        const account = { name: identity.name, email: identity.email, googleSub: identity.sub };
+        customer = walkIn
+          ? await prisma.customer.update({
+              where: { id: walkIn.id },
+              data: { ...account, claimedAt: new Date() },
+              select: SESSION_FIELDS,
+            })
+          : await prisma.customer.create({
+              data: { ...account, establishmentId, phone },
+              select: SESSION_FIELDS,
+            });
         created = true;
       }
     }
@@ -333,8 +359,14 @@ customerAuthRouter.get("/:slug/customers/me", requireCustomer, async (req, res, 
 /** GET /establishments/:slug/customers/me/appointments — histórico do cliente logado. */
 customerAuthRouter.get("/:slug/customers/me/appointments", requireCustomer, async (req, res, next) => {
   try {
+    const { customerId } = req.customer!;
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { claimedAt: true },
+    });
     const appointments = await prisma.appointment.findMany({
-      where: { customerId: req.customer!.customerId },
+      // Conta que assumiu um cadastro do dono só vê o que veio depois disso.
+      where: { customerId, ...(customer?.claimedAt ? { createdAt: { gte: customer.claimedAt } } : {}) },
       orderBy: { startsAt: "desc" },
       select: {
         id: true,
