@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { PublicOnly, RequireNotOnboarded, RequireOnboarded, RequirePlatformAdmin } from "./components/guards";
 import { PlatformPage } from "./pages/PlatformPage";
 import { AdminAppointmentsPage } from "./pages/AdminAppointmentsPage";
+import { AdminCustomersPage } from "./pages/AdminCustomersPage";
 import { AdminSchedulePage } from "./pages/AdminSchedulePage";
 import { AdminServicesPage } from "./pages/AdminServicesPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/admin" element={<AdminServicesPage />} />
         <Route path="/admin/horarios" element={<AdminSchedulePage />} />
         <Route path="/admin/agendamentos" element={<AdminAppointmentsPage />} />
+        <Route path="/admin/clientes" element={<AdminCustomersPage />} />
       </Route>
 
       {/* Página pública do estabelecimento. Segmentos estáticos (/login, /admin...)

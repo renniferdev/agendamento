@@ -7,6 +7,7 @@ const links = [
   { to: "/admin", label: "Serviços", end: true },
   { to: "/admin/horarios", label: "Horários", end: false },
   { to: "/admin/agendamentos", label: "Agendamentos", end: false },
+  { to: "/admin/clientes", label: "Clientes", end: false },
 ];
 
 export function AdminLayout({ title, children }: { title: string; children: ReactNode }) {
@@ -29,8 +30,8 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
   return (
     <div className="min-h-screen bg-paper">
       <header className="border-b border-line bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <nav className="flex items-center gap-5">
+        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <span className="font-display text-lg text-ink">Painel</span>
             {links.map((l) => (
               <NavLink

@@ -75,6 +75,13 @@ describe("Isolamento entre empresas (multi-tenant)", () => {
       expect(res.body.map((x: { id: string }) => x.id)).toEqual([a.blocked.id]);
     });
 
+    it("clientes, sem dados de login", async () => {
+      const res = await asA("get", "/admin/customers");
+      expect(res.status).toBe(200);
+      expect(res.body.map((c: { id: string }) => c.id)).toEqual([a.client.customer.id]);
+      expect(Object.keys(res.body[0]).sort()).toEqual(["createdAt", "email", "id", "name", "phone"]);
+    });
+
     it("agendamentos", async () => {
       const res = await asA("get", `/admin/appointments?from=${dateParam(new Date())}`);
       expect(res.status).toBe(200);
@@ -172,6 +179,7 @@ describe("Isolamento entre empresas (multi-tenant)", () => {
       ["get", "/admin/business-hours"],
       ["get", "/admin/blocked-slots"],
       ["get", "/admin/appointments"],
+      ["get", "/admin/customers"],
     ] as const)("%s %s responde 401", async (method, url) => {
       expect((await request(app)[method](url)).status).toBe(401);
     });

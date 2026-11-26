@@ -19,6 +19,7 @@ import { blockedSlotsRouter } from "./routes/blockedSlots";
 import { publicEstablishmentsRouter } from "./routes/publicEstablishments";
 import { customerAuthRouter } from "./routes/customerAuth";
 import { appointmentsRouter } from "./routes/appointments";
+import { customersRouter } from "./routes/customers";
 import { platformRouter } from "./routes/platform";
 import { requireActiveEstablishment } from "./middleware/requireActiveEstablishment";
 import { authLimiter } from "./middleware/rateLimit";
@@ -93,6 +94,7 @@ api.use("/admin/services", servicesRouter);
 api.use("/admin/business-hours", businessHoursRouter);
 api.use("/admin/blocked-slots", blockedSlotsRouter);
 api.use("/admin/appointments", appointmentsRouter);
+api.use("/admin/customers", customersRouter);
 
 app.use("/api", api);
 app.use("/", api);

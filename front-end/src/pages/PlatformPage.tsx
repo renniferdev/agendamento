@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, errorMessage } from "../lib/api";
-import { MerchantCustomers } from "../components/MerchantCustomers";
+import { CustomerList } from "../components/CustomerList";
 import { Alert, Button } from "../components/ui";
 
 type Status = "PENDING" | "ACTIVE" | "BLOCKED";
@@ -190,7 +190,7 @@ export function PlatformPage() {
                     </button>
                     {openId === m.id && (
                       <div className="mt-3">
-                        <MerchantCustomers merchantId={m.id} />
+                        <CustomerList endpoint={`/platform/merchants/${m.id}/customers`} />
                       </div>
                     )}
                   </div>

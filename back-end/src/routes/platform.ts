@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { listEstablishmentCustomers } from "../lib/customerList";
 import { prisma } from "../lib/prisma";
 import { requirePlatformAdmin } from "../middleware/requireAdmin";
 
@@ -48,18 +49,7 @@ platformRouter.get("/merchants/:id/customers", async (req, res, next) => {
       res.status(404).json({ error: "Usuário não encontrado." });
       return;
     }
-    if (!merchant.establishmentId) {
-      res.json([]);
-      return;
-    }
-
-    const customers = await prisma.customer.findMany({
-      where: { establishmentId: merchant.establishmentId },
-      orderBy: { createdAt: "desc" },
-      // Seleção explícita: nunca expor hash de senha nem identificador do Google.
-      select: { id: true, name: true, email: true, phone: true, createdAt: true },
-    });
-    res.json(customers);
+    res.json(merchant.establishmentId ? await listEstablishmentCustomers(merchant.establishmentId) : []);
   } catch (err) {
     next(err);
   }
