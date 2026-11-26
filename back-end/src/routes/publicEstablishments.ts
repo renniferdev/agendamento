@@ -33,7 +33,8 @@ publicEstablishmentsRouter.get("/:slug", async (req, res, next) => {
       res.status(404).json({ error: "Estabelecimento não encontrado." });
       return;
     }
-    res.json(establishment);
+    // O client ID é público (vai no navegador); null esconde o botão do Google.
+    res.json({ ...establishment, googleClientId: process.env.GOOGLE_CLIENT_ID || null });
   } catch (err) {
     next(err);
   }

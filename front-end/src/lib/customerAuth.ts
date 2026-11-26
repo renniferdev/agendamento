@@ -28,6 +28,24 @@ export function registerCustomer(
   });
 }
 
+/** Conta Google nova: falta o telefone, que o Google não informa. */
+export interface GooglePendingProfile {
+  needsPhone: true;
+  name: string;
+  email: string;
+}
+
+export function googleSignInCustomer(
+  slug: string,
+  credential: string,
+  phone?: string
+): Promise<CustomerSession | GooglePendingProfile> {
+  return api(`/establishments/${slug}/customers/google`, {
+    method: "POST",
+    body: JSON.stringify({ credential, phone }),
+  });
+}
+
 export function logoutCustomer(slug: string): Promise<void> {
   return api<void>(`/establishments/${slug}/customers/logout`, { method: "POST" });
 }

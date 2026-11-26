@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Alert, Button, Card, Field } from "../components/ui";
 import { api, ApiError, errorMessage } from "../lib/api";
+import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { CustomerAuthProvider, useCustomerAuth } from "../context/CustomerAuthContext";
 import {
   forgotPasswordCustomer,
@@ -25,6 +26,8 @@ interface Establishment {
   logoUrl: string | null;
   phone: string | null;
   services: Service[];
+  /** null quando o login com Google não está configurado no servidor. */
+  googleClientId: string | null;
 }
 
 interface Slot {
@@ -194,7 +197,7 @@ function BookingPageContent({ slug }: { slug: string }) {
 
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-6">
         {!customer ? (
-          <CustomerAuthGate brand={brand} slug={slug} />
+          <CustomerAuthGate brand={brand} slug={slug} googleClientId={establishment.googleClientId} />
         ) : (
           <CustomerBadge brand={brand} view={view} onChangeView={setView} />
         )}
@@ -480,10 +483,20 @@ function formatPhone(digits: string): string {
  * CustomerAuthContext), então este formulário chama sempre as rotas
  * `/establishments/:slug/customers/*`.
  */
-type AuthMode = "login" | "register" | "forgot" | "reset";
+type AuthMode = "login" | "register" | "forgot" | "reset" | "google-phone";
 
-function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
-  const { login, register } = useCustomerAuth();
+function CustomerAuthGate({
+  brand,
+  slug,
+  googleClientId,
+}: {
+  brand: string;
+  slug: string;
+  googleClientId: string | null;
+}) {
+  const { login, register, loginWithGoogle } = useCustomerAuth();
+  /** Conta Google nova aguardando o telefone. */
+  const [google, setGoogle] = useState<{ credential: string; name: string; email: string } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const resetToken = searchParams.get("resetToken");
 
@@ -502,6 +515,23 @@ function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
     setError(null);
     setNotice(null);
     setMode(next);
+  }
+
+  async function handleGoogle(credential: string) {
+    setError(null);
+    setNotice(null);
+    setSubmitting(true);
+    try {
+      const pending = await loginWithGoogle(credential);
+      if (pending) {
+        setGoogle({ credential, name: pending.name, email: pending.email });
+        switchMode("google-phone");
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -524,6 +554,8 @@ function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
         await login(email, password);
       } else if (mode === "register") {
         await register({ name, phone, email, password, confirmPassword });
+      } else if (mode === "google-phone") {
+        await loginWithGoogle(google!.credential, phone);
       } else if (mode === "forgot") {
         const { message } = await forgotPasswordCustomer(slug, email);
         setNotice(message);
@@ -550,6 +582,7 @@ function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
     register: "Crie sua conta para agendar",
     forgot: "Esqueci minha senha",
     reset: "Redefinir senha",
+    "google-phone": "Falta só o telefone",
   };
 
   return (
@@ -558,28 +591,35 @@ function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
         {error && <Alert>{error}</Alert>}
         {notice && <Alert kind="success">{notice}</Alert>}
 
+        {mode === "google-phone" && google && (
+          <p className="text-sm text-ink-soft">
+            Olá, <strong className="text-ink">{google.name}</strong> ({google.email}). Informe seu telefone para o
+            estabelecimento falar com você.
+          </p>
+        )}
+
         {mode === "register" && (
-          <>
-            <Field
-              label="Nome"
-              name="name"
-              required
-              minLength={2}
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <Field
-              label="Telefone (WhatsApp)"
-              name="phone"
-              type="tel"
-              required
-              autoComplete="tel"
-              placeholder="(11) 99999-9999"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </>
+          <Field
+            label="Nome"
+            name="name"
+            required
+            minLength={2}
+            autoComplete="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        )}
+        {(mode === "register" || mode === "google-phone") && (
+          <Field
+            label="Telefone (WhatsApp)"
+            name="phone"
+            type="tel"
+            required
+            autoComplete="tel"
+            placeholder="(11) 99999-9999"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
         )}
 
         {(mode === "login" || mode === "register" || mode === "forgot") && (
@@ -630,7 +670,7 @@ function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
           </button>
         )}
 
-        {mode === "register" && (
+        {(mode === "register" || mode === "google-phone") && (
           <label className="flex items-start gap-2 text-sm text-ink-soft">
             <input
               type="checkbox"
@@ -663,13 +703,32 @@ function CustomerAuthGate({ brand, slug }: { brand: string; slug: string }) {
             ? "Aguarde..."
             : mode === "login"
               ? "Entrar"
-              : mode === "register"
+              : mode === "register" || mode === "google-phone"
                 ? "Criar conta"
                 : mode === "forgot"
                   ? "Enviar link de redefinição"
                   : "Salvar nova senha"}
         </Button>
       </form>
+
+      {googleClientId && (mode === "login" || mode === "register") && (
+        <div className="mt-5 space-y-3">
+          <div className="flex items-center gap-3 text-xs text-muted">
+            <span className="h-px flex-1 bg-line" />
+            ou
+            <span className="h-px flex-1 bg-line" />
+          </div>
+          <GoogleSignInButton clientId={googleClientId} onCredential={(c) => void handleGoogle(c)} />
+        </div>
+      )}
+
+      {mode === "google-phone" && (
+        <p className="mt-6 text-center text-sm text-ink-soft">
+          <button type="button" className="font-medium text-teal hover:underline" onClick={() => switchMode("login")}>
+            Voltar para o login
+          </button>
+        </p>
+      )}
 
       {(mode === "login" || mode === "register") && (
         <p className="mt-6 text-center text-sm text-ink-soft">

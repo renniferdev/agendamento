@@ -8,6 +8,7 @@ import {
   customerSessionCookieOptions,
   signCustomerJwt,
 } from "../lib/customerAuth";
+import { InvalidGoogleCredentialError, verifyGoogleCredential } from "../lib/googleIdentity";
 import { requireCustomer } from "../middleware/requireCustomer";
 import { authLimiter } from "../middleware/rateLimit";
 import { sendPasswordResetEmail } from "../lib/email";
@@ -20,13 +21,15 @@ import { FRONTEND_URL } from "../lib/auth";
  */
 export const customerAuthRouter = Router();
 
+const phoneSchema = z
+  .string()
+  .transform((v) => v.replace(/\D/g, ""))
+  .refine((v) => v.length === 10 || v.length === 11, "Telefone deve ter DDD + número (10 ou 11 dígitos)");
+
 const registerSchema = z
   .object({
     name: z.string().trim().min(2, "Informe seu nome").max(120),
-    phone: z
-      .string()
-      .transform((v) => v.replace(/\D/g, ""))
-      .refine((v) => v.length === 10 || v.length === 11, "Telefone deve ter DDD + número (10 ou 11 dígitos)"),
+    phone: phoneSchema,
     email: z.string().trim().toLowerCase().email("E-mail inválido"),
     password: z.string().min(8, "Senha deve ter ao menos 8 caracteres").max(72),
     confirmPassword: z.string().min(1, "Confirme a senha"),
@@ -98,7 +101,8 @@ customerAuthRouter.post("/:slug/customers/login", authLimiter, async (req, res, 
     const customer = await prisma.customer.findUnique({
       where: { establishmentId_email: { establishmentId: establishment.id, email } },
     });
-    const valid = customer && (await bcrypt.compare(password, customer.passwordHash));
+    // Conta criada só com Google não tem senha: responde como credencial inválida.
+    const valid = customer?.passwordHash && (await bcrypt.compare(password, customer.passwordHash));
     if (!customer || !valid) {
       res.status(401).json({ error: "E-mail ou senha inválidos." });
       return;
@@ -110,6 +114,93 @@ customerAuthRouter.post("/:slug/customers/login", authLimiter, async (req, res, 
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: "Dados inválidos.", details: err.issues });
+      return;
+    }
+    next(err);
+  }
+});
+
+const googleSchema = z.object({
+  credential: z.string().min(1, "Credencial do Google ausente"),
+  phone: phoneSchema.optional(),
+});
+
+const SESSION_FIELDS = { id: true, name: true, email: true, phone: true } as const;
+
+/**
+ * POST /establishments/:slug/customers/google
+ *
+ * Entrar ou criar conta com o Google. O front envia o ID token do botão do
+ * Google. Como o Google não informa telefone, uma conta nova sem `phone`
+ * recebe `{ needsPhone: true }` e o front reenvia com o número.
+ */
+customerAuthRouter.post("/:slug/customers/google", authLimiter, async (req, res, next) => {
+  try {
+    const { credential, phone } = googleSchema.parse(req.body);
+
+    const establishment = await findEstablishmentBySlug(req.params.slug);
+    if (!establishment) {
+      res.status(404).json({ error: "Estabelecimento não encontrado." });
+      return;
+    }
+    const establishmentId = establishment.id;
+
+    const identity = await verifyGoogleCredential(credential);
+
+    let customer = await prisma.customer.findUnique({
+      where: { establishmentId_googleSub: { establishmentId, googleSub: identity.sub } },
+      select: SESSION_FIELDS,
+    });
+    let created = false;
+
+    if (!customer) {
+      const sameEmail = await prisma.customer.findUnique({
+        where: { establishmentId_email: { establishmentId, email: identity.email } },
+        select: { id: true },
+      });
+
+      if (sameEmail) {
+        // Só vincula quando o Google é a autoridade sobre o endereço.
+        if (!identity.emailIsAuthoritative) {
+          res.status(409).json({
+            error: "Já existe uma conta com este e-mail. Entre com sua senha.",
+            code: "ACCOUNT_TAKEN",
+          });
+          return;
+        }
+        // O cadastro por senha não confirma o e-mail: outra pessoa pode ter criado
+        // a conta com ele. Ao vincular o Google, a senha antiga deixa de valer.
+        customer = await prisma.customer.update({
+          where: { id: sameEmail.id },
+          data: { googleSub: identity.sub, passwordHash: null },
+          select: SESSION_FIELDS,
+        });
+      } else if (!phone) {
+        res.json({ needsPhone: true, name: identity.name, email: identity.email });
+        return;
+      } else {
+        customer = await prisma.customer.create({
+          data: { establishmentId, name: identity.name, email: identity.email, phone, googleSub: identity.sub },
+          select: SESSION_FIELDS,
+        });
+        created = true;
+      }
+    }
+
+    const token = signCustomerJwt({ customerId: customer.id, establishmentId });
+    res.cookie(CUSTOMER_SESSION_COOKIE, token, customerSessionCookieOptions());
+    res.status(created ? 201 : 200).json(customer);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Dados inválidos.", details: err.issues });
+      return;
+    }
+    if (err instanceof InvalidGoogleCredentialError) {
+      res.status(401).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      res.status(409).json({ error: "Já existe uma conta com este e-mail ou telefone.", code: "ACCOUNT_TAKEN" });
       return;
     }
     next(err);

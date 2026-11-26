@@ -173,7 +173,8 @@ model Customer {
   name            String
   phone           String   // só dígitos (normalizado na API); único por estabelecimento
   email           String   // login do cliente; único por estabelecimento
-  passwordHash    String   @map("password_hash")
+  passwordHash    String?  @map("password_hash") // null para quem só usa login Google
+  googleSub       String?  @map("google_sub") // identificador estável da conta Google
   createdAt       DateTime @default(now()) @map("created_at")
 
   establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
@@ -182,6 +183,7 @@ model Customer {
 
   @@unique([establishmentId, phone])
   @@unique([establishmentId, email])
+  @@unique([establishmentId, googleSub])
   @@map("customers")
 }
 
