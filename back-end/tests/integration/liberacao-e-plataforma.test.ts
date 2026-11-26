@@ -185,6 +185,31 @@ describe("Área do dono da plataforma (/platform)", () => {
     expect((await request(app).get("/admin/services").set("Cookie", merchantCookie)).status).toBe(403);
   });
 
+  it("dono vê os clientes de cada loja, só daquela loja e sem dados de login", async () => {
+    const platformOwner = await createPlatformOwner({ withGoogle: true });
+    const a = await createTenant();
+    const b = await createTenant();
+    const { customer } = await createCustomer(a.establishment.id);
+    await createCustomer(b.establishment.id);
+
+    const res = await request(app)
+      .get(`/platform/merchants/${a.owner.id}/customers`)
+      .set("Cookie", await adminCookie(platformOwner.id));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({ id: customer.id, email: customer.email, phone: customer.phone });
+    expect(Object.keys(res.body[0]).sort()).toEqual(["createdAt", "email", "id", "name", "phone"]);
+  });
+
+  it("comerciante comum não acessa a lista de clientes pela plataforma, nem a da própria loja", async () => {
+    const { owner } = await createTenant();
+    const res = await request(app)
+      .get(`/platform/merchants/${owner.id}/customers`)
+      .set("Cookie", await adminCookie(owner.id));
+    expect(res.status).toBe(403);
+  });
+
   it("comerciante não consegue se liberar sozinho", async () => {
     const { owner } = await createTenant({ status: "PENDING" });
     const res = await request(app)

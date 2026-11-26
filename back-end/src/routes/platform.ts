@@ -37,6 +37,34 @@ platformRouter.get("/merchants", async (req, res, next) => {
   }
 });
 
+/** GET /platform/merchants/:id/customers — clientes finais da loja daquele comerciante. */
+platformRouter.get("/merchants/:id/customers", async (req, res, next) => {
+  try {
+    const merchant = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { establishmentId: true },
+    });
+    if (!merchant) {
+      res.status(404).json({ error: "Usuário não encontrado." });
+      return;
+    }
+    if (!merchant.establishmentId) {
+      res.json([]);
+      return;
+    }
+
+    const customers = await prisma.customer.findMany({
+      where: { establishmentId: merchant.establishmentId },
+      orderBy: { createdAt: "desc" },
+      // Seleção explícita: nunca expor hash de senha nem identificador do Google.
+      select: { id: true, name: true, email: true, phone: true, createdAt: true },
+    });
+    res.json(customers);
+  } catch (err) {
+    next(err);
+  }
+});
+
 const statusSchema = z.object({ status: z.enum(["ACTIVE", "BLOCKED", "PENDING"]) });
 
 /** PATCH /platform/merchants/:id/status — libera, bloqueia ou volta para pendente. */

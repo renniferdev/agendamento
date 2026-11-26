@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, errorMessage } from "../lib/api";
+import { MerchantCustomers } from "../components/MerchantCustomers";
 import { Alert, Button } from "../components/ui";
 
 type Status = "PENDING" | "ACTIVE" | "BLOCKED";
@@ -39,6 +40,8 @@ export function PlatformPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Comerciante com a lista de clientes aberta. */
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -174,6 +177,24 @@ export function PlatformPage() {
                     )}
                   </div>
                 </div>
+
+                {m.establishment && (
+                  <div className="mt-3 border-t border-line pt-3">
+                    <button
+                      type="button"
+                      aria-expanded={openId === m.id}
+                      onClick={() => setOpenId(openId === m.id ? null : m.id)}
+                      className="text-sm font-medium text-teal hover:underline"
+                    >
+                      {openId === m.id ? "Ocultar clientes" : "Ver clientes"}
+                    </button>
+                    {openId === m.id && (
+                      <div className="mt-3">
+                        <MerchantCustomers merchantId={m.id} />
+                      </div>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
