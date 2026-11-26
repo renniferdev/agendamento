@@ -36,6 +36,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 /** Extrai uma mensagem legível de qualquer erro (ApiError, zod details, rede). */
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
+    // Falha do servidor (5xx): o usuário não precisa ver o detalhe técnico.
+    if (err.status >= 500) {
+      return "Não foi possível concluir agora. Tente novamente em alguns instantes.";
+    }
     const issues = err.details as { message?: string }[] | undefined;
     if (Array.isArray(issues) && issues[0]?.message) return issues[0].message;
     return err.message;
