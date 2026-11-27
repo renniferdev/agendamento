@@ -10,11 +10,11 @@ import { prisma } from "../../src/lib/prisma";
 describe("Limite de tentativas nas rotas sensíveis", () => {
   afterAll(() => prisma.$disconnect());
 
-  it("cadastro: a 11ª tentativa em 15 minutos recebe 429", async () => {
+  it("cadastro: a 61ª tentativa do mesmo IP em 15 minutos recebe 429", async () => {
     const send = () => request(app).post("/auth/register").send({ name: "x", email: "invalido", password: "1" });
 
     const first = [];
-    for (let i = 0; i < 10; i += 1) first.push(await send());
+    for (let i = 0; i < 60; i += 1) first.push(await send());
 
     // Dados inválidos (400), mas ainda dentro do limite.
     expect(first.every((r) => r.status === 400)).toBe(true);

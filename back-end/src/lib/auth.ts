@@ -2,6 +2,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import Credentials from "@auth/express/providers/credentials";
 import Google from "@auth/express/providers/google";
 import bcrypt from "bcryptjs";
+import { googleAccountEmail } from "./googleAccount";
 import { prisma } from "./prisma";
 
 /**
@@ -20,30 +21,30 @@ import { prisma } from "./prisma";
 /** Origem do front-end, usada no CORS e nos redirects pós-login do Auth.js. */
 export const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:5173";
 
-const isProd = process.env.NODE_ENV === "production";
+const prismaAdapter = PrismaAdapter(prisma);
 
 /**
- * Em produção front (Vercel) e API (Render) ficam em sites diferentes, então
- * os cookies do Auth.js precisam de `SameSite=None; Secure` para ir nos fetches
- * com credentials. Só sobrescrevemos as `options`; nome e demais atributos
- * continuam os padrões do Auth.js (que faz o merge). Em dev (http, localhost)
- * ficam os padrões.
+ * Por padrão o Auth.js vincula QUALQUER conta Google ao usuário que já está
+ * logado. Aqui só vinculamos quando o e-mail do Google é o mesmo do usuário;
+ * sem isso, alguém poderia pendurar o próprio Google na conta de outra pessoa.
  */
-const crossSite = { sameSite: "none" as const, secure: true };
-const crossSiteCookies = isProd
-  ? {
-      sessionToken: { options: crossSite },
-      callbackUrl: { options: crossSite },
-      csrfToken: { options: crossSite },
-      pkceCodeVerifier: { options: crossSite },
-      state: { options: crossSite },
-      nonce: { options: crossSite },
+const adapter: typeof prismaAdapter = {
+  ...prismaAdapter,
+  async linkAccount(account) {
+    if (account.provider === "google") {
+      const user = await prisma.user.findUnique({ where: { id: account.userId }, select: { email: true } });
+      if (!user || googleAccountEmail(account.id_token) !== user.email.toLowerCase()) {
+        throw new Error("Conta Google com e-mail diferente do usuário: vínculo recusado.");
+      }
     }
-  : undefined;
+    await prismaAdapter.linkAccount!(account);
+  },
+};
 
+// Front e API ficam na mesma origem (a Vercel repassa /api), então os cookies
+// usam o padrão do Auth.js (SameSite=Lax): outros sites não conseguem usá-los.
 export const authConfig = {
-  adapter: PrismaAdapter(prisma),
-  ...(crossSiteCookies ? { cookies: crossSiteCookies } : {}),
+  adapter,
   session: { strategy: "jwt" as const },
   secret: process.env.NEXTAUTH_SECRET,
   providers: [

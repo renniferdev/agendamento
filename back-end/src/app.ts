@@ -22,7 +22,7 @@ import { appointmentsRouter } from "./routes/appointments";
 import { customersRouter } from "./routes/customers";
 import { platformRouter } from "./routes/platform";
 import { requireActiveEstablishment } from "./middleware/requireActiveEstablishment";
-import { authLimiter } from "./middleware/rateLimit";
+import { accountLimiter, authLimiter } from "./middleware/rateLimit";
 import { FRONTEND_URL } from "./lib/auth";
 
 export const app = express();
@@ -51,13 +51,25 @@ app.use(cookieParser());
 // sessão de primeira parte) e também na raiz (dev local, VITE_API_URL sem /api).
 const api = express.Router();
 
+// Respostas com dados de clientes não podem ficar guardadas em cache.
+api.use((_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 // Cadastro por e-mail/senha e reset de senha — precisam vir ANTES do Auth.js,
 // que captura /auth/*.
 api.use("/auth", registerRouter);
 api.use("/auth", passwordResetRouter);
 
-// Login por credenciais (Auth.js) também é alvo de força bruta.
-api.use("/auth/callback/credentials", authLimiter);
+// Login por credenciais (Auth.js) também é alvo de força bruta. O formulário
+// precisa ser lido aqui para o limite por conta enxergar o e-mail.
+api.use(
+  "/auth/callback/credentials",
+  authLimiter,
+  express.urlencoded({ extended: false }),
+  accountLimiter(),
+);
 
 // Auth.js — expõe /auth/signin, /auth/callback/:provider, /auth/session, etc.
 // O @auth/express monta a URL pública (callback do Google, cookies) a partir do

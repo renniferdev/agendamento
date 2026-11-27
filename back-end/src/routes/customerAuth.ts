@@ -12,7 +12,7 @@ import {
 } from "../lib/customerAuth";
 import { InvalidGoogleCredentialError, verifyGoogleCredential } from "../lib/googleIdentity";
 import { requireCustomer } from "../middleware/requireCustomer";
-import { authLimiter } from "../middleware/rateLimit";
+import { accountLimiter, authLimiter } from "../middleware/rateLimit";
 import { sendCustomerCancelledEmail, sendPasswordResetEmail } from "../lib/email";
 import { generateResetToken, hashResetToken, RESET_TOKEN_TTL_MS } from "../lib/passwordReset";
 import { FRONTEND_URL } from "../lib/auth";
@@ -109,7 +109,7 @@ const loginSchema = z.object({
 });
 
 /** POST /establishments/:slug/customers/login */
-customerAuthRouter.post("/:slug/customers/login", authLimiter, async (req, res, next) => {
+customerAuthRouter.post("/:slug/customers/login", authLimiter, accountLimiter(), async (req, res, next) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
@@ -249,7 +249,7 @@ const CUSTOMER_GENERIC_MESSAGE = {
 };
 
 /** POST /establishments/:slug/customers/forgot-password — nunca revela se o e-mail existe. */
-customerAuthRouter.post("/:slug/customers/forgot-password", authLimiter, async (req, res, next) => {
+customerAuthRouter.post("/:slug/customers/forgot-password", authLimiter, accountLimiter(), async (req, res, next) => {
   try {
     const { email } = customerForgotSchema.parse(req.body);
 

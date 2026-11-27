@@ -2,6 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { getSession } from "@auth/express";
 import type { AccountStatus, Role } from "@prisma/client";
 import { authConfig } from "../lib/auth";
+import { googleAccountEmail } from "../lib/googleAccount";
 import { prisma } from "../lib/prisma";
 
 export interface AuthUser {
@@ -11,8 +12,8 @@ export interface AuthUser {
   /** Liberação da conta pelo dono da plataforma (PENDING até ele aprovar). */
   status: AccountStatus;
   /**
-   * Dono da plataforma: e-mail igual a PLATFORM_ADMIN_EMAIL E identidade Google
-   * vinculada (e-mail verificado pelo Google, não só digitado num cadastro).
+   * Dono da plataforma: e-mail igual a PLATFORM_ADMIN_EMAIL E uma conta Google
+   * vinculada com esse mesmo e-mail (confirmado pelo Google, não só digitado).
    */
   isPlatformAdmin: boolean;
   /** null enquanto o usuário ainda não completou o onboarding. */
@@ -65,7 +66,7 @@ export const requireAuth: RequestHandler = async (
         role: true,
         status: true,
         establishmentId: true,
-        accounts: { where: { provider: "google" }, select: { id: true }, take: 1 },
+        accounts: { where: { provider: "google" }, select: { id_token: true } },
       },
     });
 
@@ -77,7 +78,9 @@ export const requireAuth: RequestHandler = async (
 
     const platformEmail = process.env.PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
     const isPlatformAdmin =
-      !!platformEmail && user.email.toLowerCase() === platformEmail && user.accounts.length > 0;
+      !!platformEmail &&
+      user.email.toLowerCase() === platformEmail &&
+      user.accounts.some((a) => googleAccountEmail(a.id_token) === platformEmail);
 
     req.authUser = {
       id: user.id,

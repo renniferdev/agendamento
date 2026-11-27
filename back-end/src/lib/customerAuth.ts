@@ -30,18 +30,14 @@ export function verifyCustomerJwt(token: string): CustomerJwtPayload {
 }
 
 /**
- * Em produção o front e o back normalmente ficam em domínios diferentes
- * (cross-site) e só é possível enviar cookie nesse caso com
- * `SameSite=None; Secure` — que por sua vez exige HTTPS. Em dev, front e
- * back são portas diferentes do mesmo `localhost` (same-site), então
- * `Lax` já basta e evita depender de HTTPS local.
+ * Front e API ficam na mesma origem (a Vercel repassa /api), então o cookie é
+ * `SameSite=Lax`: outros sites não conseguem fazer pedidos em nome do cliente.
  */
 export function customerSessionCookieOptions() {
-  const isProd = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    sameSite: (isProd ? "none" : "lax") as "none" | "lax",
-    secure: isProd,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
     maxAge: EXPIRES_IN_SECONDS * 1000,
     path: "/",
   };

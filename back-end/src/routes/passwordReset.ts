@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma";
 import { sendPasswordResetEmail } from "../lib/email";
 import { generateResetToken, hashResetToken, RESET_TOKEN_TTL_MS } from "../lib/passwordReset";
 import { FRONTEND_URL } from "../lib/auth";
-import { authLimiter } from "../middleware/rateLimit";
+import { accountLimiter, authLimiter } from "../middleware/rateLimit";
 
 /**
  * "Esqueci minha senha" do admin/staff (User). Montado em /auth, ao lado de
@@ -20,7 +20,7 @@ const forgotSchema = z.object({
 const GENERIC_MESSAGE = { message: "Se existir uma conta com este e-mail, enviamos um link de redefinição." };
 
 /** POST /auth/forgot-password — nunca revela se o e-mail existe. */
-passwordResetRouter.post("/forgot-password", authLimiter, async (req, res, next) => {
+passwordResetRouter.post("/forgot-password", authLimiter, accountLimiter(), async (req, res, next) => {
   try {
     const { email } = forgotSchema.parse(req.body);
 

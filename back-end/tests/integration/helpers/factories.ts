@@ -104,6 +104,12 @@ export async function createCustomer(establishmentId: string) {
   return { customer, cookie };
 }
 
+/** ID token no formato do Google (para o servidor só importa o conteúdo). */
+export function googleIdToken(email: string): string {
+  const claims = Buffer.from(JSON.stringify({ email, email_verified: true })).toString("base64url");
+  return `cabecalho.${claims}.assinatura`;
+}
+
 /** Dono da plataforma: e-mail de PLATFORM_ADMIN_EMAIL, com ou sem login Google vinculado. */
 export async function createPlatformOwner(options: { withGoogle: boolean }) {
   const user = await prisma.user.create({
@@ -118,6 +124,7 @@ export async function createPlatformOwner(options: { withGoogle: boolean }) {
                 type: "oidc",
                 provider: "google",
                 providerAccountId: `google-${uid()}`,
+                id_token: googleIdToken(process.env.PLATFORM_ADMIN_EMAIL!),
               },
             },
           }
