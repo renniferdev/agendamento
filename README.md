@@ -2,6 +2,23 @@
 
 SaaS multi-tenant de agendamento de horários (estilo "Calendly para estabelecimentos"): cada estabelecimento tem sua página pública de reservas, horários de funcionamento, serviços e clientes.
 
+## 🚀 Teste agora
+
+**👉 [Abrir a loja de demonstração](https://agendamento-rt.vercel.app/renniferbarbearia)**
+
+Entre com a conta de cliente abaixo:
+
+| E-mail | Senha |
+|---|---|
+| `recrutador@gmail.com` | `Rr120404*` |
+
+1. Abra o link e faça login.
+2. Em **Agendar**, escolha o serviço, o dia e o horário e confirme.
+3. Em **Meus horários**, acompanhe o agendamento ou cancele (o cancelamento pelo site vale até 2 horas antes).
+
+> O primeiro acesso pode levar cerca de 1 minuto, porque o servidor gratuito entra em repouso quando fica sem uso.
+> A conta é compartilhada: não cadastre dados pessoais reais.
+
 ## Stack
 
 - **back-end**: Node.js + TypeScript, Express, Prisma (PostgreSQL), Auth.js (`@auth/express`), Resend (e-mails), Zod.
