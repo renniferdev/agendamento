@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { StoreQrCode } from "./StoreQrCode";
 import { Button } from "./ui";
 
 const links = [
@@ -13,6 +14,7 @@ const links = [
 export function AdminLayout({ title, children }: { title: string; children: ReactNode }) {
   const { user, establishment, signOut } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
 
   const publicUrl = establishment ? `${window.location.origin}/${establishment.slug}` : null;
 
@@ -55,7 +57,7 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
             </Button>
           </div>
         </div>
-        {publicUrl && (
+        {establishment && publicUrl && (
           <div className="border-t border-line bg-brass-light">
             <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm">
               <span className="text-ink-soft">Link de agendamento dos seus clientes:</span>
@@ -70,7 +72,20 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
               <button type="button" onClick={() => void copyLink()} className="text-brass hover:underline">
                 {copied ? "Copiado ✓" : "Copiar"}
               </button>
+              <button
+                type="button"
+                aria-expanded={showQr}
+                onClick={() => setShowQr((open) => !open)}
+                className="text-brass hover:underline"
+              >
+                {showQr ? "Fechar QR Code" : "Ver QR Code"}
+              </button>
             </div>
+            {showQr && (
+              <div className="mx-auto max-w-3xl px-4 pb-4 text-sm">
+                <StoreQrCode url={publicUrl} fileName={`qrcode-${establishment.slug}.png`} />
+              </div>
+            )}
           </div>
         )}
       </header>
