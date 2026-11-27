@@ -132,6 +132,27 @@ export async function sendCancellationEmail(data: {
   );
 }
 
+/** Avisa o dono de que o próprio cliente cancelou um horário. */
+export async function sendCustomerCancelledEmail(data: {
+  to: string;
+  customerName: string;
+  customerPhone: string;
+  serviceName: string;
+  startsAt: Date;
+}): Promise<void> {
+  const when = dateTimeFmt.format(data.startsAt);
+  await send(
+    data.to,
+    `Horário cancelado pelo cliente: ${data.customerName}`,
+    `<p>Um cliente cancelou um agendamento. O horário voltou a ficar disponível.</p>
+     <ul>
+       <li><strong>Cliente:</strong> ${escapeHtml(data.customerName)} (${escapeHtml(data.customerPhone)})</li>
+       <li><strong>Serviço:</strong> ${escapeHtml(data.serviceName)}</li>
+       <li><strong>Quando era:</strong> ${when}</li>
+     </ul>`
+  );
+}
+
 /** Link de "esqueci minha senha", usado tanto pelo admin quanto pelo cliente final. */
 export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
   await send(

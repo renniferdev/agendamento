@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { CANCEL_NOTICE_HOURS, cancellationDeadline, customerCanCancel } from "../lib/cancellation";
 import { phoneSchema } from "../lib/phone";
 import { prisma } from "../lib/prisma";
 import {
@@ -12,7 +13,7 @@ import {
 import { InvalidGoogleCredentialError, verifyGoogleCredential } from "../lib/googleIdentity";
 import { requireCustomer } from "../middleware/requireCustomer";
 import { authLimiter } from "../middleware/rateLimit";
-import { sendPasswordResetEmail } from "../lib/email";
+import { sendCustomerCancelledEmail, sendPasswordResetEmail } from "../lib/email";
 import { generateResetToken, hashResetToken, RESET_TOKEN_TTL_MS } from "../lib/passwordReset";
 import { FRONTEND_URL } from "../lib/auth";
 
@@ -356,17 +357,21 @@ customerAuthRouter.get("/:slug/customers/me", requireCustomer, async (req, res, 
   }
 });
 
+/** Agendamentos que esta conta pode ver e alterar. */
+async function visibleAppointments(customerId: string) {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { claimedAt: true },
+  });
+  // Conta que assumiu um cadastro do dono só alcança o que veio depois disso.
+  return { customerId, ...(customer?.claimedAt ? { createdAt: { gte: customer.claimedAt } } : {}) };
+}
+
 /** GET /establishments/:slug/customers/me/appointments — histórico do cliente logado. */
 customerAuthRouter.get("/:slug/customers/me/appointments", requireCustomer, async (req, res, next) => {
   try {
-    const { customerId } = req.customer!;
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { claimedAt: true },
-    });
     const appointments = await prisma.appointment.findMany({
-      // Conta que assumiu um cadastro do dono só vê o que veio depois disso.
-      where: { customerId, ...(customer?.claimedAt ? { createdAt: { gte: customer.claimedAt } } : {}) },
+      where: await visibleAppointments(req.customer!.customerId),
       orderBy: { startsAt: "desc" },
       select: {
         id: true,
@@ -376,8 +381,70 @@ customerAuthRouter.get("/:slug/customers/me/appointments", requireCustomer, asyn
         service: { select: { name: true, durationMinutes: true, priceCents: true } },
       },
     });
-    res.json(appointments);
+    // A regra fica no servidor; a tela só obedece a `canCancel`.
+    res.json(appointments.map((a) => ({ ...a, canCancel: customerCanCancel(a) })));
   } catch (err) {
     next(err);
   }
 });
+
+/** PATCH /establishments/:slug/customers/me/appointments/:id/cancel — o cliente desmarca. */
+customerAuthRouter.patch(
+  "/:slug/customers/me/appointments/:id/cancel",
+  requireCustomer,
+  async (req, res, next) => {
+    try {
+      const visible = await visibleAppointments(req.customer!.customerId);
+      const appointment = await prisma.appointment.findFirst({
+        where: { ...visible, id: req.params.id },
+        include: {
+          customer: { select: { name: true, phone: true } },
+          service: { select: { name: true } },
+        },
+      });
+      if (!appointment) {
+        res.status(404).json({ error: "Agendamento não encontrado." });
+        return;
+      }
+
+      // Condição no próprio UPDATE: duas requisições juntas não cancelam duas vezes.
+      const { count } = await prisma.appointment.updateMany({
+        where: {
+          id: appointment.id,
+          status: { in: ["PENDING", "CONFIRMED"] },
+          startsAt: { gt: cancellationDeadline() },
+        },
+        data: { status: "CANCELLED" },
+      });
+      if (count === 0) {
+        res.status(409).json({
+          error: `O cancelamento pelo site é permitido até ${CANCEL_NOTICE_HOURS} horas antes. Fale com o estabelecimento.`,
+          code: "NOT_CANCELLABLE",
+        });
+        return;
+      }
+      res.status(204).send();
+
+      // Depois da resposta: o aviso ao dono nunca atrasa nem derruba o cancelamento.
+      prisma.user
+        .findFirst({
+          where: { establishmentId: appointment.establishmentId, role: "ADMIN" },
+          select: { email: true },
+        })
+        .then((owner) =>
+          owner
+            ? sendCustomerCancelledEmail({
+                to: owner.email,
+                customerName: appointment.customer.name,
+                customerPhone: appointment.customer.phone,
+                serviceName: appointment.service.name,
+                startsAt: appointment.startsAt,
+              })
+            : undefined
+        )
+        .catch((err) => console.error("[email] falha ao avisar cancelamento do cliente:", err));
+    } catch (err) {
+      next(err);
+    }
+  }
+);

@@ -74,9 +74,15 @@ export interface CustomerAppointment {
   startsAt: string;
   endsAt: string;
   status: CustomerAppointmentStatus;
+  /** Definido pelo servidor conforme o prazo mínimo de cancelamento. */
+  canCancel: boolean;
   service: { name: string; durationMinutes: number; priceCents: number };
 }
 
 export function getCustomerAppointments(slug: string): Promise<CustomerAppointment[]> {
   return api<CustomerAppointment[]>(`/establishments/${slug}/customers/me/appointments`);
+}
+
+export function cancelCustomerAppointment(slug: string, appointmentId: string): Promise<void> {
+  return api(`/establishments/${slug}/customers/me/appointments/${appointmentId}/cancel`, { method: "PATCH" });
 }

@@ -10,6 +10,7 @@ import { brandTheme } from "../lib/brandTheme";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { CustomerAuthProvider, useCustomerAuth } from "../context/CustomerAuthContext";
 import {
+  cancelCustomerAppointment,
   forgotPasswordCustomer,
   getCustomerAppointments,
   resetPasswordCustomer,
@@ -201,30 +202,12 @@ function BookingPageContent({ slug }: { slug: string }) {
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
         {!customer && (
-          <div className="flex flex-col items-center gap-6">
+          <div className="flex justify-center">
             <CustomerAuthGate slug={slug} googleClientId={establishment.googleClientId} />
-            {establishment.services.length > 0 && (
-              <section className="w-full max-w-md" aria-labelledby="services-preview">
-                <h2 id="services-preview" className="mb-2 text-lg font-bold">
-                  Serviços
-                </h2>
-                <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
-                  {establishment.services.map((s) => (
-                    <li key={s.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold">{s.name}</p>
-                        <p className="text-sm text-muted">{s.durationMinutes} min</p>
-                      </div>
-                      <p className="font-bold">{brl.format(s.priceCents / 100)}</p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
           </div>
         )}
 
-        {customer && view === "profile" && <CustomerProfile />}
+        {customer && view === "profile" && <CustomerProfile establishmentPhone={establishment.phone} />}
 
         {customer &&
           view === "booking" &&
@@ -392,11 +375,25 @@ const STATUS_LABEL: Record<CustomerAppointmentStatus, string> = {
  * "Meus horários": agendamentos do cliente naquele estabelecimento (não é
  * agregado entre lojas diferentes) e os dados da conta.
  */
-function CustomerProfile() {
+function CustomerProfile({ establishmentPhone }: { establishmentPhone: string | null }) {
   const { customer } = useCustomerAuth();
   const { slug = "" } = useParams();
   const [appointments, setAppointments] = useState<CustomerAppointment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  async function cancelAppointment(id: string) {
+    setNotice(null);
+    setCancelError(null);
+    try {
+      await cancelCustomerAppointment(slug, id);
+      setAppointments((list) => list?.map((a) => (a.id === id ? { ...a, status: "CANCELLED" } : a)) ?? list);
+      setNotice("Horário cancelado.");
+    } catch (err) {
+      setCancelError(errorMessage(err));
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -426,6 +423,12 @@ function CustomerProfile() {
     <div className="space-y-7">
       <section>
         <h2 className="mb-3 text-xl font-bold">Próximos horários</h2>
+        {(notice || cancelError) && (
+          <div className="mb-3" role="status">
+            {notice && <Alert kind="success">{notice}</Alert>}
+            {cancelError && <Alert>{cancelError}</Alert>}
+          </div>
+        )}
         {error ? (
           <Alert>{error}</Alert>
         ) : appointments === null ? (
@@ -437,7 +440,12 @@ function CustomerProfile() {
         ) : (
           <ul className="space-y-2">
             {upcoming.map((a) => (
-              <AppointmentRow key={a.id} appointment={a} />
+              <AppointmentRow
+                key={a.id}
+                appointment={a}
+                onCancel={() => cancelAppointment(a.id)}
+                establishmentPhone={establishmentPhone}
+              />
             ))}
           </ul>
         )}
@@ -473,30 +481,112 @@ function CustomerProfile() {
   );
 }
 
-function AppointmentRow({ appointment, past = false }: { appointment: CustomerAppointment; past?: boolean }) {
+function AppointmentRow({
+  appointment,
+  past = false,
+  onCancel,
+  establishmentPhone,
+}: {
+  appointment: CustomerAppointment;
+  past?: boolean;
+  /** Presente só nos próximos horários. */
+  onCancel?: () => Promise<void>;
+  establishmentPhone?: string | null;
+}) {
   const start = new Date(appointment.startsAt);
   const cancelled = appointment.status === "CANCELLED";
+  const open = appointment.status === "CONFIRMED" || appointment.status === "PENDING";
+  const canCancel = onCancel && appointment.canCancel;
+  /** Próximo demais para cancelar pelo site: o cliente fala com a loja. */
+  const tooLate = onCancel && open && !appointment.canCancel;
+  /** Confirmação na própria linha, com botões grandes e escritos por extenso. */
+  const [asking, setAsking] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  async function confirmCancel() {
+    setCancelling(true);
+    await onCancel!();
+    setCancelling(false);
+    setAsking(false);
+  }
+
   return (
-    <li className="flex items-center gap-3 rounded-2xl border border-line bg-white p-3">
-      <DateBlock date={start} muted={past} />
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold">{appointment.service.name}</p>
-        <p className="text-sm text-muted">
-          <span className="sr-only">{fullDayFmt.format(start)}, </span>
-          às {timeFmt.format(start)}
-        </p>
+    <li className="rounded-2xl border border-line bg-white p-3">
+      <div className="flex items-center gap-3">
+        <DateBlock date={start} muted={past} />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">{appointment.service.name}</p>
+          <p className="text-sm text-muted">
+            <span className="sr-only">{fullDayFmt.format(start)}, </span>
+            às {timeFmt.format(start)}
+          </p>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+            cancelled
+              ? "bg-danger-light text-danger"
+              : past
+                ? "bg-paper-dim text-muted"
+                : "bg-success-light text-success"
+          }`}
+        >
+          {STATUS_LABEL[appointment.status]}
+        </span>
       </div>
-      <span
-        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-          cancelled
-            ? "bg-danger-light text-danger"
-            : past
-              ? "bg-paper-dim text-muted"
-              : "bg-success-light text-success"
-        }`}
-      >
-        {STATUS_LABEL[appointment.status]}
-      </span>
+
+      {tooLate && (
+        <p className="mt-3 border-t border-line pt-3 text-center text-sm text-ink-soft">
+          Falta pouco para este horário. Para cancelar, fale com a loja
+          {establishmentPhone ? (
+            <>
+              {": "}
+              <a
+                href={`tel:${establishmentPhone.replace(/[^\d+]/g, "")}`}
+                className="font-semibold text-(--brand-ink) underline"
+              >
+                {formatPhone(establishmentPhone)}
+              </a>
+            </>
+          ) : (
+            "."
+          )}
+        </p>
+      )}
+
+      {canCancel &&
+        (asking ? (
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="mb-3 text-center font-semibold">
+              Cancelar o horário de {fullDayFmt.format(start)}, às {timeFmt.format(start)}?
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => void confirmCancel()}
+                className="min-h-12 rounded-xl bg-danger font-bold text-white disabled:opacity-60"
+              >
+                {cancelling ? "Cancelando..." : "Sim, cancelar"}
+              </button>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => setAsking(false)}
+                className="min-h-12 rounded-xl border border-line bg-white font-semibold"
+              >
+                Não, manter
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAsking(true)}
+            className="mt-3 min-h-11 w-full rounded-xl border border-danger/40 font-semibold text-danger hover:bg-danger-light"
+          >
+            Cancelar este horário
+          </button>
+        ))}
     </li>
   );
 }
@@ -815,7 +905,7 @@ function Confirmation({ appointment, onReset }: { appointment: CreatedAppointmen
 
       {phone && (
         <p className="mt-5 text-center text-sm text-muted">
-          Precisa remarcar? Ligue para{" "}
+          Para cancelar, abra “Meus horários”. Dúvidas? Ligue para{" "}
           <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className="font-semibold text-(--brand-ink) underline">
             {formatPhone(phone)}
           </a>
