@@ -30,19 +30,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const sessionUser = await getSession();
+      // Busca tudo antes de atualizar a tela: com o usuário definido e o status
+      // ainda vazio, os guards mostrariam o cadastro da loja por um instante.
+      const status = sessionUser ? await getOnboardingStatus() : null;
       setUser(sessionUser);
-      if (sessionUser) {
-        const status = await getOnboardingStatus();
-        setOnboarded(status.onboarded);
-        setAccountStatus(status.accountStatus);
-        setIsPlatformAdmin(status.isPlatformAdmin);
-        setEstablishment(status.establishment);
-      } else {
-        setOnboarded(null);
-        setAccountStatus(null);
-        setIsPlatformAdmin(false);
-        setEstablishment(null);
-      }
+      setOnboarded(status?.onboarded ?? null);
+      setAccountStatus(status?.accountStatus ?? null);
+      setIsPlatformAdmin(status?.isPlatformAdmin ?? false);
+      setEstablishment(status?.establishment ?? null);
     } catch {
       // Backend fora do ar ou sessão inválida: trata como deslogado.
       setUser(null);
