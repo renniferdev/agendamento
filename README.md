@@ -4,20 +4,26 @@ SaaS multi-tenant de agendamento de horários (estilo "Calendly para estabelecim
 
 ## 🚀 Teste agora
 
-**👉 [Abrir a loja de demonstração](https://agendamento-rt.vercel.app/renniferbarbearia)**
+### Como dono do comércio
 
-Entre com a conta de cliente abaixo:
+**👉 [Entrar no painel](https://agendamento-rt.vercel.app/login)** com e-mail e senha:
 
 | E-mail | Senha |
 |---|---|
-| `recrutador@gmail.com` | `Rr120404*` |
+| `recrutadortest@gmail.com` | `Rr120505*` |
 
-1. Abra o link e faça login.
+No painel você cadastra **Serviços** e **Horários**, marca e cancela **Agendamentos**, consulta **Clientes** e baixa o **QR Code** da loja.
+
+### Como cliente
+
+**👉 [Abrir a página da loja](https://agendamento-rt.vercel.app/recrutador)**
+
+1. Crie uma conta com dados fictícios.
 2. Em **Agendar**, escolha o serviço, o dia e o horário e confirme.
 3. Em **Meus horários**, acompanhe o agendamento ou cancele (o cancelamento pelo site vale até 2 horas antes).
 
 > O primeiro acesso pode levar cerca de 1 minuto, porque o servidor gratuito entra em repouso quando fica sem uso.
-> A conta é compartilhada: não cadastre dados pessoais reais.
+> A loja de demonstração é compartilhada: não cadastre dados pessoais reais.
 
 ## Stack
 
