@@ -37,6 +37,11 @@
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* O Edge tem um olho próprio; o campo de senha já traz o nosso. */
+input::-ms-reveal {
+  display: none;
+}
+
 body {
   background-color: var(--color-paper);
   color: var(--color-ink);
